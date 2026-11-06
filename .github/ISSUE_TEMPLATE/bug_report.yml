@@ -1,0 +1,24 @@
+name: Segnalazione bug
+description: Un comportamento errato riproducibile con dati fittizi.
+labels: [bug]
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Comportamento osservato e atteso
+      description: Non allegare memorie reali, segreti o configurazioni personali.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Passi per riprodurre
+      description: Usa un archivio fittizio e indica il comando eseguito.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Versione Engramma, sistema operativo e shell
+    validations:
+      required: true

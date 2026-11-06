@@ -1,0 +1,13 @@
+schema: spec-driven
+context: |
+  Engramma is a Bash/Python CLI for Linux/WSL with a separate private Git archive.
+  Specs describe observable behavior. User-facing documentation is in Italian.
+  Preserve native Claude memory; validate changes only with isolated fake data.
+  Runtime code has no third-party Python or Node dependencies.
+rules:
+  proposal:
+    - Separate current verified behavior from proposed capabilities.
+  specs:
+    - Use MUST or SHALL and concrete WHEN/THEN scenarios.
+  tasks:
+    - Include meaningful verification for each implementation task.

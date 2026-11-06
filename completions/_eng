@@ -1,0 +1,43 @@
+#compdef eng engramma
+# Completion of eng and engramma for zsh: commands, workspaces, options.
+# Linked by eng into ~/.local/share/zsh/site-functions, which must be in fpath
+# before compinit (global/shell/zprofile adds it).
+
+local dir offset=2
+local -a archive_args
+if [[ $words[2] == --data-dir && CURRENT -gt 3 ]]; then
+	archive_args=(--data-dir "$words[3]")
+	offset=4
+fi
+dir=$("${commands[$service]}" "${archive_args[@]}" --print-data-dir 2>/dev/null)
+local -a workspaces option_list
+workspaces=()
+[[ -n $dir ]] && workspaces=($dir/workspaces/*(N/:t))
+option_list=(
+	'-n:mostra senza eseguire' '--dry-run:mostra senza eseguire'
+	'-v:mostra anche i controlli passati' '--verbose:mostra anche i controlli passati'
+	'--path:cartella dei repo del workspace' '-j:repo insieme' '--jobs:repo insieme'
+	'--data-dir:archivio per questa esecuzione'
+	'--prune:cancella i branch già mergiati' '-h:aiuto' '--help:aiuto'
+)
+
+case $words[CURRENT-1] in
+	--path | --data-dir) _files -/; return ;;
+	-j | --jobs) _message 'numero di repo insieme'; return ;;
+esac
+
+if [[ $PREFIX == -* ]]; then
+	_describe 'opzione' option_list
+elif (( CURRENT == offset )); then
+	local -a command_list=('sync:pull, postazione e repo' 'setup:solo postazione' 'list:workspace e repo' 'save:commit di un workspace' 'new:nuovo workspace' 'add:aggiunge un repo' 'log:ultimo log' 'detach:symlink in copie' 'help:aiuto')
+	_describe 'comando' command_list
+	_describe 'workspace' workspaces
+elif [[ $words[offset] == detach ]]; then
+	compadd all $workspaces
+elif [[ $words[offset] == save ]]; then
+	compadd global $workspaces
+elif [[ $words[offset] == (new|log) ]] || { [[ $words[offset] == add ]] && (( CURRENT > offset + 1 )); }; then
+	return 0
+else
+	compadd $workspaces
+fi

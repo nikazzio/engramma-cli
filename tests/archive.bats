@@ -1,0 +1,151 @@
+#!/usr/bin/env bats
+
+load helpers
+
+setup() {
+	setup_sandbox
+	git -C "$ENGRAMMA_DIR" init --quiet
+	git -C "$ENGRAMMA_DIR" add -A
+	git -C "$ENGRAMMA_DIR" commit --quiet -m "fixture"
+	ARCHIVE="$TEST_ROOT/archive with spaces"
+	git clone --quiet "$ENGRAMMA_DIR" "$ARCHIVE"
+	mkdir -p "$XDG_CONFIG_HOME/engramma"
+	printf '%s\n' "$ARCHIVE" >"$XDG_CONFIG_HOME/engramma/archive"
+}
+
+teardown() {
+	teardown_sandbox
+}
+
+@test "saved archive takes precedence over the legacy environment" {
+	run "$SYNC" --print-data-dir
+	[ "$status" -eq 0 ]
+	[ "$output" = "$ARCHIVE" ]
+}
+
+@test "explicit archive overrides environment and preserves the saved default" {
+	export ENGRAMMA_DATA_DIR="$TEST_ROOT/missing"
+	run "$SYNC" --data-dir "$ENGRAMMA_DIR" --print-data-dir
+	[ "$status" -eq 0 ]
+	[ "$output" = "$ENGRAMMA_DIR" ]
+	[ "$(cat "$XDG_CONFIG_HOME/engramma/archive")" = "$ARCHIVE" ]
+	run "$SYNC" --print-data-dir
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"Archivio non valido"* ]]
+	[ ! -e "$TEST_ROOT/missing" ]
+}
+
+@test "environment archive overrides the saved default" {
+	export ENGRAMMA_DATA_DIR="$ENGRAMMA_DIR"
+	run "$SYNC" --print-data-dir
+	[ "$status" -eq 0 ]
+	[ "$output" = "$ENGRAMMA_DIR" ]
+}
+
+@test "an archive path with spaces supports writes and command installation" {
+	run "$SYNC" new saved-project
+	[ "$status" -eq 0 ]
+	[ -f "$ARCHIVE/workspaces/saved-project/repos.txt" ]
+	[ ! -e "$ENGRAMMA_DIR/workspaces/saved-project" ]
+	run "$SYNC" setup
+	[ "$status" -eq 0 ]
+	[ "$(readlink "$HOME/.local/bin/eng")" = "$(realpath "$SYNC")" ]
+	run "$HOME/.local/bin/eng" list
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"saved-project"* ]]
+}
+
+@test "missing selection fails without creating an archive while help remains available" {
+	rm "$XDG_CONFIG_HOME/engramma/archive"
+	unset ENGRAMMA_DIR
+	local before
+	before="$(snapshot)"
+	run "$SYNC" list
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"Archivio non configurato"* ]]
+	run "$SYNC" --help
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"--data-dir"* ]]
+	run "$SYNC" --version
+	[ "$status" -eq 0 ]
+	[ "$output" = "Engramma $(cat "$BATS_TEST_DIRNAME/../VERSION")" ]
+	[ "$(snapshot)" = "$before" ]
+}
+
+@test "archive selection rejects missing arguments and nested non-root directories" {
+	run "$SYNC" --data-dir
+	[ "$status" -eq 1 ]
+	run "$SYNC" --data-dir "$ARCHIVE/workspaces" list
+	[ "$status" -eq 1 ]
+	mkdir -p "$ARCHIVE/nested/workspaces"
+	run "$SYNC" --data-dir "$ARCHIVE/nested" list
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"radice di un repository Git"* ]]
+}
+
+@test "saved archive configuration is literal text rather than executable shell" {
+	printf '%s\n' '$(touch injected)' >"$XDG_CONFIG_HOME/engramma/archive"
+	run "$SYNC" list
+	[ "$status" -eq 1 ]
+	[[ "$output" == *'$(touch injected)'* ]]
+	[ ! -e injected ]
+}
+
+@test "program-only installation sets up and detaches an independent archive" {
+	local program="$TEST_ROOT/program only" root
+	root="$(realpath "$BATS_TEST_DIRNAME/..")"
+	mkdir -p "$program"
+	cp -a "$root/bin" "$root/lib" "$root/completions" "$root/VERSION" "$program/"
+	[ ! -e "$program/workspaces" ]
+	[ ! -e "$program/global" ]
+	run "$program/bin/sync.sh" sync demo
+	[ "$status" -eq 0 ]
+	[ "$(readlink "$HOME/.local/bin/eng")" = "$program/bin/sync.sh" ]
+	[ "$(readlink "$HOME/.local/share/bash-completion/completions/eng")" = "$program/completions/eng.bash" ]
+	local memory
+	memory="$(memory_dir_for "$WORKSPACE/alpha")"
+	[ "$(readlink "$memory")" = "$ARCHIVE/workspaces/demo/memory/alpha" ]
+	run "$HOME/.local/bin/eng" detach all
+	[ "$status" -eq 0 ]
+	[ ! -L "$memory" ]
+	[ "$(cat "$memory/MEMORY.md")" = "- memoria alpha" ]
+	[ ! -L "$HOME/.local/bin/eng" ]
+	[ -f "$program/bin/sync.sh" ]
+}
+
+@test "zsh completion uses an explicit archive without changing the default" {
+	command -v zsh >/dev/null || skip "zsh non installato"
+	mkdir -p "$TEST_ROOT/bin" "$ENGRAMMA_DIR/workspaces/explicit-only"
+	ln -s "$(realpath "$SYNC")" "$TEST_ROOT/bin/eng"
+	run env PATH="$TEST_ROOT/bin:$PATH" zsh -f -c '
+		service=eng
+		words=(eng --data-dir "$1" save "")
+		CURRENT=5
+		PREFIX=""
+		compadd() { printf "%s\n" "$@"; }
+		source "$2"
+	' _ "$ENGRAMMA_DIR" "$BATS_TEST_DIRNAME/../completions/_eng"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"global"*"explicit-only"* ]]
+	[ "$(cat "$XDG_CONFIG_HOME/engramma/archive")" = "$ARCHIVE" ]
+}
+
+@test "native memory travels between two isolated Claude configurations" {
+	local first_memory second_memory other_home="$TEST_ROOT/second home"
+	local program_before
+	program_before="$(sha256sum "$SYNC")"
+	# Select the first archive explicitly; the saved default is the second clone.
+	"$SYNC" --data-dir "$ENGRAMMA_DIR" sync demo >/dev/null
+	first_memory="$(memory_dir_for "$WORKSPACE/alpha")"
+	echo "ricordo dal primo computer" >"$first_memory/MEMORY.md"
+	"$SYNC" --data-dir "$ENGRAMMA_DIR" save demo >/dev/null
+	# The first archive is the local remote of the second clone.
+	env HOME="$other_home" XDG_CONFIG_HOME="$other_home/.config" XDG_DATA_HOME="$other_home/.local/share" \
+		XDG_STATE_HOME="$other_home/.local/state" XDG_CACHE_HOME="$other_home/.cache" ENGRAMMA_CLAUDE_HOME="$other_home/.claude" \
+		"$SYNC" --data-dir "$ARCHIVE" sync demo >/dev/null
+	second_memory="$other_home/.claude/projects/$(printf '%s' "$other_home/workspace/demo/alpha" | sed 's#[^A-Za-z0-9]#-#g')/memory"
+	[ -L "$second_memory" ]
+	[ "$(cat "$second_memory/MEMORY.md")" = "ricordo dal primo computer" ]
+	[ "$(sha256sum "$SYNC")" = "$program_before" ]
+	[ "$(cat "$XDG_CONFIG_HOME/engramma/archive")" = "$ARCHIVE" ]
+}

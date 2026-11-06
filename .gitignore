@@ -1,0 +1,13 @@
+/.tools/
+/dist/
+/backup/
+/.boost/
+/.code-review-graph/
+/workspaces/
+/global/
+/skills/
+/.env
+__pycache__/
+*.py[cod]
+.DS_Store
+.claude/settings.local.json

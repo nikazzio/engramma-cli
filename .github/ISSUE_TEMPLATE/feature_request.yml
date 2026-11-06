@@ -1,0 +1,17 @@
+name: Proposta di miglioramento
+description: Un problema concreto e il comportamento desiderato.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Quale problema vuoi risolvere?
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Che risultato ti aspetti?
+      description: Descrivi un esempio concreto e come verificarlo.
+    validations:
+      required: true
