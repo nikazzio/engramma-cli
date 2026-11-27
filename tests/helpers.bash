@@ -3,6 +3,8 @@
 PYTHON="$(command -v /usr/bin/python3 || command -v python3)"
 export PYTHON
 export SYNC="$BATS_TEST_DIRNAME/../bin/sync.sh"
+# Bats 1.2 provides a run directory but no per-file directory.
+TEST_TEMPLATE="${BATS_FILE_TMPDIR:-${BATS_RUN_TMPDIR:?}/${BATS_TEST_FILENAME##*/}}/template"
 
 write_git_config() {
 	cat >"$1" <<'EOF'
@@ -18,7 +20,7 @@ EOF
 
 # The fake remotes are the same in every test of a file: built once, then copied.
 setup_file() {
-	TEST_ROOT="$BATS_FILE_TMPDIR/template"
+	TEST_ROOT="$TEST_TEMPLATE"
 	mkdir -p "$TEST_ROOT"
 	export GIT_CONFIG_GLOBAL="$TEST_ROOT/gitconfig" GIT_CONFIG_NOSYSTEM=1
 	write_git_config "$GIT_CONFIG_GLOBAL"
@@ -28,7 +30,7 @@ setup_file() {
 
 setup_sandbox() {
 	TEST_ROOT="$(mktemp -d)"
-	cp -a "$BATS_FILE_TMPDIR/template/." "$TEST_ROOT/"
+	cp -a "$TEST_TEMPLATE/." "$TEST_ROOT/"
 	export HOME="$TEST_ROOT/home"
 	export PATH="$HOME/.local/bin:$PATH"
 	export XDG_CONFIG_HOME="$HOME/.config"
