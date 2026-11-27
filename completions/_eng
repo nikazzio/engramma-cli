@@ -13,13 +13,19 @@ dir=$("${commands[$service]}" "${archive_args[@]}" --print-data-dir 2>/dev/null)
 local -a workspaces option_list
 workspaces=()
 [[ -n $dir ]] && workspaces=($dir/workspaces/*(N/:t))
-option_list=(
-	'-n:mostra senza eseguire' '--dry-run:mostra senza eseguire'
-	'-v:mostra anche i controlli passati' '--verbose:mostra anche i controlli passati'
-	'--path:cartella dei repo del workspace' '-j:repo insieme' '--jobs:repo insieme'
-	'--data-dir:archivio per questa esecuzione'
-	'--prune:cancella i branch già mergiati' '-h:aiuto' '--help:aiuto'
-)
+option_list=('--version:versione del programma')
+if (( CURRENT == offset )); then
+	option_list+=('-h:aiuto' '--help:aiuto')
+	(( offset == 2 )) && option_list+=('--data-dir:archivio per questa esecuzione')
+else
+	case $words[offset] in
+		sync|setup|detach) option_list+=('-n:mostra senza eseguire' '--dry-run:mostra senza eseguire') ;&
+		check) option_list+=('-v:mostra anche i controlli passati' '--verbose:mostra anche i controlli passati') ;;
+	esac
+	if [[ $words[offset] == sync ]]; then
+		option_list+=('--path:cartella dei repo' '-j:repo insieme' '--jobs:repo insieme' '--prune:cancella i branch obsoleti')
+	fi
+fi
 
 case $words[CURRENT-1] in
 	--path | --data-dir) _files -/; return ;;
@@ -35,10 +41,12 @@ elif (( CURRENT == offset )); then
 elif [[ $words[offset] == detach ]]; then
 	compadd all global $workspaces
 elif [[ $words[offset] == tools ]]; then
-	compadd install global $workspaces
+	local -a targets=(global $workspaces)
+	(( CURRENT == offset + 1 )) && targets=(install $targets)
+	compadd $targets
 elif [[ $words[offset] == (save|sync|check) ]]; then
 	compadd global $workspaces
-elif [[ $words[offset] == (new|log) ]] || { [[ $words[offset] == add ]] && (( CURRENT > offset + 1 )); }; then
+elif [[ $words[offset] == (new|log|setup|integrations|help) ]] || { [[ $words[offset] == add ]] && (( CURRENT > offset + 1 )); }; then
 	return 0
 else
 	compadd $workspaces

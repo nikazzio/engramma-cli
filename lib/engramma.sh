@@ -154,9 +154,10 @@ detach_engramma_command() {
 		[[ -L "$link" && "$(readlink "$link")" == "$PROGRAM_DIR/"* ]] || continue
 		if [[ "$MODE" == dry ]]; then
 			would "rimuoverei il symlink $(path "$link")"
-		else
-			rm "$link"
+		elif rm -- "$link"; then
 			ok "rimosso il symlink $(path "$link")"
+		else
+			problem "impossibile rimuovere il symlink $(path "$link")"
 		fi
 	done
 }

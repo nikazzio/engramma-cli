@@ -4,7 +4,7 @@
 eng [--data-dir <archivio>] [comando] [workspace | global] [opzioni]
 ```
 
-`sync`, `setup`, `save`, `detach`, `tools install`, `new` e `add` cambiano qualcosa; `new` e `add` scrivono solo nell'archivio. `session-start`, lanciato dall'hook di Claude Code, aggiorna l'archivio e unisce i file uniti. Tutti gli altri comandi leggono e basta.
+`sync`, `setup`, `save`, `detach` e `tools install` applicano modifiche. `new` e `add` scrivono nell'archivio. `session-start`, lanciato dall'hook di Claude Code, aggiorna l'archivio e unisce i file configurati con `unisci`. I controlli mostrano lo stato e registrano il risultato nel log.
 
 ## Controllare
 
@@ -32,7 +32,7 @@ Il controllo elenca anche il lavoro da non perdere: file non committati, commit 
 | `eng tools install [ws \| global]` | mise installa i programmi mancanti, alla versione richiesta. Per quelli fuori da mise mostra il comando. |
 | `eng new <ws> [cartella]` | Crea `workspaces/<ws>/` nell'archivio. La cartella è relativa a `~/workspace` (default: il nome) e nasce al primo `eng sync`. |
 | `eng add <ws> <url> [branch]` | Aggiunge un repo a `repos.txt`. Il nome della cartella viene dall'URL. Il repo viene clonato al successivo `eng sync`. |
-| `eng detach <ws \| global \| all>` | Sostituisce i collegamenti con copie indipendenti. Dopo `detach all` l'archivio si può cancellare. Vedi [Domande frequenti](faq.md#scollegare-engramma). |
+| `eng detach <ws \| global \| all>` | Sostituisce i collegamenti con copie indipendenti sul computer corrente. Vedi [Domande frequenti](faq.md#scollegare-engramma). |
 
 > [!NOTE]
 > `eng sync` salva da solo i workspace, con il messaggio `Update workspace context`. La configurazione del computer e le skill generali si salvano solo con `eng save global`.
@@ -47,7 +47,7 @@ Il controllo elenca anche il lavoro da non perdere: file non committati, commit 
 | `--path <dir>` | `sync` di un solo workspace | Dove stanno i suoi repo su questo computer. Viene ricordato in `~/.config/engramma/paths`. |
 | `-j`, `--jobs <n>` | `sync` | Quanti repo clonare o aggiornare insieme (default 3, o il valore di `~/.config/engramma/config`). |
 | `--prune` | `sync` | Cancella senza chiedere i branch locali già mergiati o rimossi dal remoto, **anche quelli con commit solo locali**. |
-| `--version` | da solo | La versione del programma. |
+| `--version` | in qualsiasi posizione | Mostra la versione ed esce prima di leggere l’archivio o eseguire il comando. |
 | `-h`, `--help` | da solo | L'aiuto. |
 
 `~/.config/engramma/config` accetta:

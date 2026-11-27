@@ -11,4 +11,5 @@
 | [Più computer](multi-computer.md) | Salvare, ricevere, conflitti, backup, avvio della sessione |
 | [Problemi comuni](troubleshooting.md) | Messaggio, causa, soluzione |
 | [Domande frequenti](faq.md) | Segreti, scollegare engramma, limiti |
-| [Sviluppo](development.md) | Test, strumenti, specifiche, release |
+| [Sviluppo](development.md) | Test, strumenti, verifica su due computer, release |
+| [Roadmap beta](roadmap.md) | Criteri per la prima beta pubblica |

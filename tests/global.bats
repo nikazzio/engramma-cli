@@ -291,7 +291,7 @@ EOF2
 	SHELL=/bin/zsh PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"mise non attivato in ~/.zshrc"* ]]
-	[[ "$output" == *"echo 'eval \"\$(~/.local/bin/mise activate zsh)\"' >> ~/.zshrc"* ]]
+	[[ "$output" == *"eval \"\$($ENGRAMMA_MISE activate zsh)\"' >> ~/.zshrc"* ]]
 
 	echo 'eval "$(~/.local/bin/mise activate zsh)"' >"$HOME/.zshrc"
 	SHELL=/bin/zsh PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check

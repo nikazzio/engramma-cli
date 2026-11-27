@@ -24,6 +24,8 @@ sequenceDiagram
 
 Se il push fallisce, rilancia lo stesso comando: riprova a inviare anche i commit già fatti.
 
+La prima volta che Claude scrive una memoria locale per un repo nuovo, lancia `eng sync <ws>` sullo stesso computer. Engramma la acquisisce nell’archivio, la collega al repo e la invia. Da quel momento puoi salvarne le modifiche anche con `eng save <ws>`.
+
 ## Ricevere
 
 `eng sync` scarica l'archivio solo in avanti. Se l'archivio ha commit locali non inviati e insieme commit nuovi sul remoto, non unisce da solo. Lo segnala e suggerisce `git pull --rebase` e `git push` nell'archivio.

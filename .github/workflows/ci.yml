@@ -37,6 +37,9 @@ jobs:
           make dist
           cd dist
           sha256sum --check SHA256SUMS
+          version="$(cat ../VERSION)"
+          tar -xzf "engramma-$version.tar.gz"
+          test "$("./engramma-$version/bin/sync.sh" --version)" = "Engramma $version"
 
   contracts:
     name: Contracts and repository checks

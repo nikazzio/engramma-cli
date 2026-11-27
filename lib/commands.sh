@@ -93,17 +93,28 @@ send_workspace_updates() {
 }
 
 # The skeleton of a new workspace: README, folder and an empty list of repos.
-new_workspace() {
-	local name="${1:-}" location="${2:-}" dir
+new_workspace() (
+	local name="${1:-}" location="${2:-}" dir staging root destination
+	(( $# <= 2 )) || fail_usage "Uso: eng new <workspace> [cartella]"
 	[[ "$name" =~ ^[a-z0-9][a-z0-9._-]*$ ]] || fail_usage "eng new vuole un nome di workspace (minuscole, cifre, - . _)"
 	# "eng <name>" must stay unambiguous: a command or "global" always wins.
 	[[ " $RESERVED_NAMES " != *" $name "* ]] || fail_usage "'$name' è un nome riservato ai comandi di eng: scegline un altro"
+	if [[ -n "$location" ]]; then
+		root="$(realpath -m -- "$DEFAULT_WORKSPACES_ROOT")" || return 1
+		destination="$(realpath -m -- "$root/$location")" || return 1
+		if [[ "$location" = /* || "$location" =~ [[:space:]#] || "/$location/" = */../* || "$destination" != "$root/"* ]]; then
+			fail_usage "La cartella deve essere relativa a ~/workspace, senza spazi, # o .."
+		fi
+	fi
 	dir="$ENGRAMMA_DIR/workspaces/$name"
-	[[ ! -e "$dir" ]] || { say_fail "il workspace $name esiste già"; return 1; }
-	mkdir -p "$dir"
-	[[ -n "$location" ]] && echo "$location" >"$dir/location.txt"
-	printf '# <cartella> <url git> [branch principale]\n' >"$dir/repos.txt"
-	cat >"$dir/README.md" <<EOF
+	[[ ! -e "$dir" && ! -L "$dir" ]] || { say_fail "il workspace $name esiste già"; return 1; }
+	staging="$(mktemp -d -- "$ENGRAMMA_DIR/workspaces/.new-XXXXXXXX")" || { say_fail "impossibile preparare $name"; return 1; }
+	trap 'rm -rf -- "$staging"' EXIT
+	if [[ -n "$location" ]]; then
+		printf '%s\n' "$location" >"$staging/location.txt" || { say_fail "scrittura della cartella fallita"; return 1; }
+	fi
+	printf '# <cartella> <url git> [branch principale]\n' >"$staging/repos.txt" || { say_fail "scrittura della lista dei repo fallita"; return 1; }
+	if ! cat >"$staging/README.md" <<EOF
 # $name
 
 <cosa contiene il workspace, in una riga>
@@ -115,27 +126,62 @@ new_workspace() {
 
 Cartella: \`~/workspace/${location:-$name}\`.
 EOF
+	then
+		say_fail "scrittura della descrizione del workspace fallita"
+		return 1
+	fi
+	if ! mv -Tn -- "$staging" "$dir" || [[ -e "$staging" ]]; then
+		say_fail "creazione del workspace $name fallita"
+		return 1
+	fi
 	say_done "workspace ${REPO}$name${RESET} creato in $(path "$dir")"
 	echo "   ${DIM}poi:${RESET} ${CMD}eng add $name <url git>${RESET}${DIM}, la descrizione nel README, e ${RESET}${CMD}eng sync $name${RESET}"
-}
+)
 
 # Adds a repo to the list of a workspace; eng sync clones it.
-add_repo() {
-	local name="${1:-}" url="${2:-}" branch="${3:-}" folder file
+add_repo() (
+	local name="${1:-}" url="${2:-}" branch="${3:-}" folder file staging newline=""
+	(( $# <= 3 )) || fail_usage "Uso: eng add <workspace> <url git> [branch principale]"
 	[[ -n "$name" && -n "$url" ]] || fail_usage "Uso: eng add <workspace> <url git> [branch principale]"
+	[[ "$name" =~ ^[a-z0-9][a-z0-9._-]*$ ]] || fail_usage "Nome di workspace non valido: '$name'"
 	is_workspace "$name" || fail_usage "Workspace sconosciuto: '$name' (ci sono: $(available_workspaces))"
 	folder="${url%.git}" folder="${folder##*[/:]}"
+	[[ -n "$folder" && "$folder" != . && "$folder" != .. && "$folder" != .git && "$folder" != -* && ! "$url" =~ [[:space:]#] ]] || fail_usage "URL o nome della cartella del repo non valido"
+	[[ -z "$branch" || ( ! "$branch" =~ [[:space:]#] && "$branch" != -* ) ]] || fail_usage "Nome del branch non valido"
+	if is_reserved_repo_folder "$folder"; then
+		fail_usage "'$folder' è una cartella riservata al workspace"
+	fi
 	file="$ENGRAMMA_DIR/workspaces/$name/repos.txt"
-	if read_list_file "$file" | awk '{ print $1 }' | grep -qxF "$folder"; then
+	if [[ "$(realpath -- "${file%/*}")" != "$ENGRAMMA_DIR/workspaces/"* ]]; then
+		say_fail "la cartella del workspace deve stare nell'archivio"
+		return 1
+	fi
+	if ! exec 9<"$ENGRAMMA_DIR/workspaces/$name" || ! flock -x 9; then
+		say_fail "impossibile bloccare la lista dei repo"
+		return 1
+	fi
+	if [[ -L "$file" || ( -e "$file" && ! -f "$file" ) ]]; then
+		say_fail "la lista dei repo deve essere un file regolare"
+		return 1
+	fi
+	if [[ -f "$file" ]] && awk -v name="$folder" '$1 == name { found=1 } END { exit !found }' "$file"; then
 		say_fail "$folder è già in $(path "$file")"
 		return 1
 	fi
 	# A last line without its newline would swallow the new entry.
-	[[ -s "$file" && "$(tail -c 1 "$file")" != "" ]] && echo >>"$file"
-	echo "$folder $url${branch:+ $branch}" >>"$file"
+	staging="$(mktemp -- "${file%/*}/.repos-XXXXXXXX")" || { say_fail "impossibile preparare la lista dei repo"; return 1; }
+	trap 'rm -f -- "$staging"' EXIT
+	if [[ -f "$file" ]]; then
+		cp -p -- "$file" "$staging" || { say_fail "copia della lista dei repo fallita"; return 1; }
+		[[ -s "$staging" && "$(tail -c 1 "$staging")" != "" ]] && newline=$'\n'
+	fi
+	if ! printf '%s%s %s%s\n' "$newline" "$folder" "$url" "${branch:+ $branch}" >>"$staging" || ! mv -T -- "$staging" "$file"; then
+		say_fail "scrittura della lista dei repo fallita"
+		return 1
+	fi
 	say_done "${TEXT}$folder${RESET} aggiunto a $(path "$file")"
 	echo "   ${DIM}poi:${RESET} ${CMD}eng sync $name${RESET} ${DIM}lo clona; aggiungilo anche alla tabella del README del workspace${RESET}"
-}
+)
 
 # The log of the last run: in the pager in a terminal, printed otherwise.
 show_last_log() {

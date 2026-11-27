@@ -4,15 +4,15 @@ Tre situazioni: crei l'archivio la prima volta, installi su un computer, aggiung
 
 ## 1. Creare l'archivio
 
-L'archivio è un repo Git privato. Scarica il programma e parti dal suo esempio:
+L'archivio è un repo Git privato. Crea un repository privato vuoto e sostituisci `ACCOUNT/ARCHIVIO-PRIVATO` con il suo percorso. Scarica il programma e parti dal suo esempio.
 
 ```bash
-git clone <url di Engramma> ~/engramma
+git clone git@github.com:nikazzio/engramma-cli.git ~/engramma
 cp -r ~/engramma/examples/archive ~/engramma-dati
 cd ~/engramma-dati
 git init -b main
 git add -A && git commit -m "archivio iniziale"
-git remote add origin git@github.com:<tu>/<archivio-privato>.git
+git remote add origin git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git
 git push -u origin main
 ```
 
@@ -23,7 +23,7 @@ L'esempio contiene un workspace `demo` e una cartella `global/` minima. Il signi
 
 ## 2. Installare su un computer
 
-Se hai appena creato l'archivio, il programma è già in `~/engramma`; altrimenti scaricalo con `git clone <url di Engramma> ~/engramma`.
+Se hai appena creato l'archivio, il programma è già in `~/engramma`; altrimenti scaricalo con `git clone git@github.com:nikazzio/engramma-cli.git ~/engramma`.
 
 ```bash
 mkdir -p ~/.config/engramma && echo ~/engramma-dati > ~/.config/engramma/archive
@@ -61,8 +61,8 @@ eng sync acme                                   # clona, collega, salva
 ## 4. Un secondo computer
 
 ```bash
-git clone git@github.com:<tu>/<archivio-privato>.git ~/engramma-dati
-git clone <url di Engramma> ~/engramma
+git clone git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git ~/engramma-dati
+git clone git@github.com:nikazzio/engramma-cli.git ~/engramma
 mkdir -p ~/.config/engramma && echo ~/engramma-dati > ~/.config/engramma/archive
 ~/engramma/bin/sync.sh setup
 eng sync acme

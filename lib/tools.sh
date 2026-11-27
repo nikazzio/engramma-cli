@@ -29,7 +29,7 @@ ensure_mise() {
 	mise="$(mise_command)"
 	if [[ -n "$mise" ]]; then
 		fine "${REF}mise${RESET} $(path "$mise")"
-		check_mise_activation
+		check_mise_activation "$mise"
 		return 0
 	fi
 	case "$MODE" in
@@ -40,7 +40,7 @@ ensure_mise() {
 				if output="$(sh -c "$MISE_INSTALL_COMMAND" 2>&1 </dev/null)" && [[ -n "$(mise_command)" ]]; then
 					log_output "$output"
 					ok "mise installato in $(path "$(mise_command)")"
-					check_mise_activation
+					check_mise_activation "$(mise_command)"
 					return 0
 				fi
 				log_output "$output"
@@ -56,12 +56,17 @@ ensure_mise() {
 # programs of its requires.txt. Adds to the TOOLS_* counters and lists.
 tools_area() {
 	local title="$1" config="$2" folder="$3" requires="$4" mise="$5"
-	local name version installed command optional hint shown=false
+	local name version installed command optional hint rows shown=false
 	echo ""
 	echo " ${REPO}$title${RESET}  ${DIM}$(tilde "$config")${RESET}"
 
 	if [[ -f "$config" ]]; then
+		if ! rows="$(cd "$folder" && "$mise" ls --current --json | "$PYTHON" "$LIB_DIR/mise_tools.py" "$config")"; then
+			say_fail "$title: impossibile leggere i programmi di mise per $(path "$config")"
+			return 1
+		fi
 		while IFS=$'\t' read -r name version installed; do
+			[[ -n "$name" ]] || continue
 			shown=true
 			if ((installed)); then
 				printf '   %s %s%-20s%s %s\n' "${GREEN}●${RESET}" "$TEXT" "$name" "$RESET" "${DIM}$version${RESET}"
@@ -71,7 +76,7 @@ tools_area() {
 				TOOLS_MISSING=$((TOOLS_MISSING + 1))
 				TOOLS_TO_INSTALL+=("$folder"$'\t'"$name@$version")
 			fi
-		done < <(cd "$folder" && "$mise" ls --current --json 2>/dev/null | "$PYTHON" "$LIB_DIR/mise_tools.py" "$config")
+		done <<<"$rows"
 	fi
 
 	while IFS= read -r command; do
@@ -120,11 +125,11 @@ tools_command() {
 	fi
 
 	if $install; then
-		tools_areas "$show_global" "$mise" "${names[@]}" >/dev/null
+		tools_areas "$show_global" "$mise" "${names[@]}" >/dev/null || return 1
 		install_missing_tools "$mise"
 		return
 	fi
-	tools_areas "$show_global" "$mise" "${names[@]}"
+	tools_areas "$show_global" "$mise" "${names[@]}" || return 1
 	echo ""
 	echo " ${BOLD}$TOOLS_INSTALLED installati · $TOOLS_MISSING mancanti${RESET}"
 	((${#TOOLS_TO_INSTALL[@]})) && echo "   ${CMD}eng tools install${RESET}  ${DIM}installa con mise: $(tools_names)${RESET}"
@@ -133,16 +138,18 @@ tools_command() {
 }
 
 tools_areas() {
-	local show_global="$1" mise="$2" name folder
+	local show_global="$1" mise="$2" name folder status=0
 	shift 2
-	$show_global && tools_area global "$GLOBAL_DIR/mise/config.toml" "$HOME" "$GLOBAL_REQUIRES_FILE" "$mise"
+	if $show_global; then
+		tools_area global "$GLOBAL_DIR/mise/config.toml" "$HOME" "$GLOBAL_REQUIRES_FILE" "$mise" || status=1
+	fi
 	for name in "$@"; do
 		load_workspace "$name"
 		folder="$WORKSPACE_NOTES_DIR"
 		[[ -d "$WORKSPACE_DIR" ]] && folder="$WORKSPACE_DIR"
-		tools_area "$name" "$WORKSPACE_NOTES_DIR/mise.toml" "$folder" "$WORKSPACE_NOTES_DIR/requires.txt" "$mise"
+		tools_area "$name" "$WORKSPACE_NOTES_DIR/mise.toml" "$folder" "$WORKSPACE_NOTES_DIR/requires.txt" "$mise" || status=1
 	done
-	return 0
+	return "$status"
 }
 
 # The names of the tools mise has to install, without their versions.

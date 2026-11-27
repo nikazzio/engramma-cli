@@ -207,8 +207,7 @@ merge_global_file() {
 use_mise_tools() {
 	[[ -z "${ENGRAMMA_NO_MISE:-}" ]] || return 0
 	local mise mise_path
-	mise="$(command -v mise)"
-	[[ -z "$mise" && -x "$HOME/.local/bin/mise" ]] && mise="$HOME/.local/bin/mise"
+	mise="$(mise_command)"
 	[[ -n "$mise" ]] || return 0
 	mise_path="$(cd "$HOME" && "$mise" env -s bash 2>/dev/null | sed -nE "s/^export PATH='(.*)'$/\1/p")"
 	[[ -n "$mise_path" ]] && PATH="$mise_path"
@@ -400,7 +399,7 @@ interactive_rc_file() {
 
 # Login shells get mise from shell/zprofile, interactive ones need it in their rc file.
 check_mise_activation() {
-	local shell_name rc
+	local mise="$1" shell_name rc activation
 	shell_name="$(basename "${SHELL:-bash}")"
 	rc="$(interactive_rc_file)"
 	[[ -n "$rc" ]] || return 0
@@ -409,7 +408,9 @@ check_mise_activation() {
 		fine "mise activate in $(path "$rc")"
 	else
 		problem "mise non attivato in $(path "$rc"): la shell potrebbe non usare la versione richiesta dal progetto"
-		fix_with 20 "${CMD}echo 'eval \"\$(~/.local/bin/mise activate $shell_name)\"' >> $(tilde "$rc")${RESET}, poi apri un terminale nuovo"
+		# shellcheck disable=SC2016 # the rc must evaluate the command at shell startup
+		printf -v activation 'eval "$(%q activate %s)"' "$mise" "$shell_name"
+		fix_with 20 "${CMD}printf '%s\\n' '${activation//\'/\'\\\'\'}' >> $(tilde "$rc")${RESET}, poi apri un terminale nuovo"
 	fi
 }
 

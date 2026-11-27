@@ -109,3 +109,34 @@ teardown() {
 	[ ! -L "$WORKSPACE/mise.toml" ]
 	grep -q 'php = "8.3"' "$WORKSPACE/mise.toml"
 }
+
+@test "tools and tools install report mise failures and stop before installation" {
+	cat >"$ENGRAMMA_MISE" <<'STUB'
+#!/bin/sh
+case "$1" in
+	ls)
+		if [ "$PWD" = "$HOME" ]; then
+			cat "$FAKE_MISE_LS"
+		else
+			echo "mise: invalid workspace configuration" >&2
+			exit 1
+		fi ;;
+	install) echo unexpected >"$FAKE_MISE_LOG" ;;
+esac
+STUB
+	for action in "" install; do
+		local args=(tools)
+		[[ -z "$action" ]] || args+=("$action")
+		run "$SYNC" "${args[@]}"
+		[ "$status" -eq 1 ]
+		[[ "$output" == *"mise: invalid workspace configuration"* ]]
+		[[ "$output" == *"demo: impossibile leggere i programmi di mise"* ]]
+		[[ "$output" != *"niente da installare"* ]]
+		[ ! -e "$FAKE_MISE_LOG" ]
+	done
+
+	echo 'not JSON' >"$FAKE_MISE_LS"
+	run "$SYNC" tools global
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"global: impossibile leggere i programmi di mise"* ]]
+}

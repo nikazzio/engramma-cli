@@ -6,7 +6,7 @@ is_engramma_link() {
 }
 
 detach_link() {
-	local link="$1" label="$2" target temporary
+	local link="$1" label="$2" target staging
 	is_engramma_link "$link" || return 0
 	target="$(readlink "$link")"
 
@@ -20,22 +20,42 @@ detach_link() {
 		return
 	fi
 
-	temporary="$link.engramma-detach.$$"
-	if ! cp -a "$target" "$temporary"; then
-		rm -rf "$temporary"
-		fail "${REF}$label${RESET}: copia fallita, il symlink resta"
-		PROBLEM_COUNT=$((PROBLEM_COUNT + 1))
+	staging="$(mktemp -d -- "$link.engramma-XXXXXXXX")" || { problem "${REF}$label${RESET}: impossibile preparare la copia"; return; }
+	if ! cp -aH -- "$target" "$staging/copy"; then
+		rm -rf -- "$staging"
+		problem "${REF}$label${RESET}: copia fallita, il symlink resta"
 		return
 	fi
-	rm "$link"
-	mv "$temporary" "$link"
+	# A directory cannot replace a symlink with rename. Keep the original
+	# beside the finished copy until the directory is in place.
+	if [[ -d "$staging/copy" ]]; then
+		if ! mv -T -- "$link" "$staging/original"; then
+			rm -rf -- "$staging"
+			problem "${REF}$label${RESET}: impossibile spostare il symlink"
+			return
+		fi
+		if ! mv -Tn -- "$staging/copy" "$link" || [[ -e "$staging/copy" ]]; then
+			if ln -sT -- "$target" "$link"; then
+				rm -rf -- "$staging"
+				problem "${REF}$label${RESET}: sostituzione fallita, symlink ripristinato"
+			else
+				problem "${REF}$label${RESET}: sostituzione fallita, collegamento originale in $(path "$staging/original")"
+			fi
+			return
+		fi
+	elif ! mv -T -- "$staging/copy" "$link"; then
+		rm -rf -- "$staging"
+		problem "${REF}$label${RESET}: sostituzione fallita, il symlink resta"
+		return
+	fi
+	rm -rf -- "$staging"
 	ok "${REF}$label${RESET}: symlink → copia indipendente"
 }
 
 detach_repo_note() {
 	local repo="$1" name="$2"
 	local note="$WORKSPACE_NOTES_DIR/repo-notes/$name.md"
-	local file="$repo/$REPO_NOTE_FILE"
+	local file="$repo/$REPO_NOTE_FILE" staging
 
 	[[ -f "$file" && -f "$note" && "$(cat "$file")" == "@$note" ]] || return 0
 
@@ -44,7 +64,13 @@ detach_repo_note() {
 		return
 	fi
 
-	cp "$note" "$file.engramma-detach.$$" && mv "$file.engramma-detach.$$" "$file"
+	staging="$(mktemp -d -- "$file.engramma-XXXXXXXX")" || { problem "${FILE}$REPO_NOTE_FILE${RESET}: impossibile preparare la nota"; return; }
+	if ! cp -- "$note" "$staging/copy" || ! mv -T -- "$staging/copy" "$file"; then
+		rm -rf -- "$staging"
+		problem "${FILE}$REPO_NOTE_FILE${RESET}: copia della nota fallita, il riferimento originale resta"
+		return
+	fi
+	rmdir -- "$staging"
 	ok "${FILE}$REPO_NOTE_FILE${RESET}: @import → testo della nota"
 }
 

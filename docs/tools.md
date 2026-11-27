@@ -48,6 +48,7 @@ $ eng tools
 
 - `eng tools` mostra global e i workspace presenti sul computer. Usa `eng tools <ws>` o `eng tools global` per uno solo.
 - `eng tools install` fa installare a mise le versioni mancanti, ognuna dalla cartella del suo file.
+- Se mise restituisce un errore durante la lettura, Engramma mostra il motivo e termina con codice 1. In questo caso anche `eng tools install` si ferma prima di installare i programmi.
 - Non cambia niente senza `install`, ed esce con `1` se manca qualcosa.
 
 ## `requires.txt`: programmi fuori da mise

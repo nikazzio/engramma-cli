@@ -279,7 +279,7 @@ is_reserved_repo_folder() {
 }
 
 # A folder name that says what the repo is: <owner>-<repo> from its URL, or just
-# <repo> when it already starts with the owner (formacamera/formacamera-api).
+# <repo> when it already starts with the owner (example/example-api).
 suggested_repo_folder() {
 	local path="${1%.git}" repo owner
 	path="${path##*:}"

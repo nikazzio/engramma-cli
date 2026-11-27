@@ -6,6 +6,7 @@
 _eng() {
 	local current="${COMP_WORDS[COMP_CWORD]}" previous="${COMP_WORDS[COMP_CWORD - 1]}"
 	local command dir workspaces words offset=1
+	COMPREPLY=()
 	local archive_args=()
 	command="$(command -v "${COMP_WORDS[0]}")" || return 0
 	if [[ "${COMP_WORDS[1]:-}" == --data-dir && $COMP_CWORD -gt 2 ]]; then
@@ -15,7 +16,7 @@ _eng() {
 	dir="$("$command" "${archive_args[@]}" --print-data-dir 2>/dev/null)" || dir=""
 	workspaces=""
 	if [[ -n "$dir" ]]; then
-		workspaces="$(cd "$dir/workspaces" 2>/dev/null && printf '%s ' */ | tr -d /)"
+		workspaces="$(cd "$dir/workspaces" 2>/dev/null && for entry in */; do [[ -d "$entry" ]] && printf '%s ' "${entry%/}"; done)"
 	fi
 	case "$previous" in
 		--path | --data-dir)
@@ -25,16 +26,27 @@ _eng() {
 		-j | --jobs) return 0 ;;
 	esac
 	if [[ "$current" == -* ]]; then
-		words="--data-dir -n --dry-run -v --verbose --path -j --jobs --prune -h --help"
+		words="--version"
+		if ((COMP_CWORD == offset)); then
+			words+=" -h --help"
+			((offset == 1)) && words+=" --data-dir"
+		else
+			case "${COMP_WORDS[offset]}" in
+				sync) words+=" -v --verbose -n --dry-run --path -j --jobs --prune" ;;
+				setup | detach) words+=" -v --verbose -n --dry-run" ;;
+				check) words+=" -v --verbose" ;;
+			esac
+		fi
 	elif ((COMP_CWORD == offset)); then
 		words="check sync setup detach list tools integrations save new add log help global $workspaces"
 	elif [[ "${COMP_WORDS[offset]}" == detach ]]; then
 		words="all global $workspaces"
 	elif [[ "${COMP_WORDS[offset]}" == tools ]]; then
-		words="install global $workspaces"
+		words="global $workspaces"
+		((COMP_CWORD == offset + 1)) && words="install $words"
 	elif [[ "${COMP_WORDS[offset]}" =~ ^(save|sync|check)$ ]]; then
 		words="global $workspaces"
-	elif [[ "${COMP_WORDS[offset]}" =~ ^(new|log)$ ]] || { [[ "${COMP_WORDS[offset]}" == add ]] && ((COMP_CWORD > offset + 1)); }; then
+	elif [[ "${COMP_WORDS[offset]}" =~ ^(new|log|setup|integrations|help)$ ]] || { [[ "${COMP_WORDS[offset]}" == add ]] && ((COMP_CWORD > offset + 1)); }; then
 		return 0
 	else
 		words="$workspaces"

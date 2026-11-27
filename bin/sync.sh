@@ -7,11 +7,13 @@ LIB_DIR="$PROGRAM_DIR/lib"
 
 # shellcheck source=../lib/archive.sh
 source "$LIB_DIR/archive.sh"
-case "${1:-}" in
-	--version)
+for argument in "$@"; do
+	if [[ "$argument" == --version ]]; then
 		printf 'Engramma %s\n' "$(cat "$PROGRAM_DIR/VERSION")"
 		exit 0
-		;;
+	fi
+done
+case "${1:-}" in
 	-h | --help | help) ENGRAMMA_DIR="" ;;
 	*)
 		select_archive "$@" || exit 1
@@ -113,7 +115,7 @@ available_workspaces() {
 }
 
 is_workspace() {
-	[[ -n "$1" && -d "$ENGRAMMA_DIR/workspaces/$1" ]]
+	[[ "$1" =~ ^[a-z0-9][a-z0-9._-]*$ && -d "$ENGRAMMA_DIR/workspaces/$1" ]]
 }
 
 fail_usage() {

@@ -161,6 +161,9 @@ complete_eng() {
 	[ "$(complete_eng --data-dir "$ENGRAMMA_DIR" sync "")" = $'global\ndemo' ]
 	[[ "$(complete_eng "")" == *"check"* ]]
 	[ "$(complete_eng sync --pr)" = "--prune" ]
+	[ "$(complete_eng setup --pr)" = "" ]
+	[ "$(complete_eng tools install i)" = "" ]
+	[ "$(complete_eng --vers)" = "--version" ]
 	[ "$(complete_eng sync -j "")" = "" ]
 }
 

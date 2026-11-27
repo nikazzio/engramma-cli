@@ -28,17 +28,17 @@ Servono Bats, ShellCheck, zsh e Make. actionlint e Gitleaks sono fissati in `too
 > [!IMPORTANT]
 > I test usano sempre HOME, cartelle XDG, Claude e mise finti. Non lanciare mai `setup`, `sync` o `detach` sul tuo archivio vero per verificare una modifica.
 
-## Prova con un Claude Code vero
+## Prova della memoria fra due computer
 
-I test non avviano Claude. Per verificare che Claude legga davvero regole e memoria:
+Servono due installazioni Linux/WSL indipendenti, A e B. Su ciascuna usa un utente dedicato alla prova, con la propria HOME, configurazione XDG e sessione di Claude Code. Esegui Claude in un terminale del relativo utente. Annota la versione di Engramma e di Claude su entrambe.
 
-1. Copia `examples/archive/` in una cartella nuova, inizializzala come repo Git e metti in `workspaces/demo/repos.txt` un repo fittizio locale.
-2. Prepara una HOME e cartelle XDG temporanee. Imposta `ENGRAMMA_CLAUDE_HOME` su una cartella di Claude dedicata alla prova. Lancia `eng --data-dir <archivio> sync demo -n`, poi senza `-n`.
-3. Avvia Claude nel repo fittizio con `CLAUDE_CONFIG_DIR` uguale alla cartella di prova, da un terminale e non da dentro un'altra sessione di agente.
-4. Con `/memory` controlla che la posizione della memoria coincida con quella gestita da engramma.
-5. Chiedi a Claude di ricordare una frase inventata, apri una sessione nuova e verifica che la ricordi.
+1. **Prepara A.** Segui [Primi passi](getting-started.md) con un archivio Git privato di prova. Nel workspace `demo` registra un piccolo repo Git di nome `app`, accessibile anche da B. Esegui `eng sync demo -n`, poi `eng sync demo`. Verifica che l’archivio abbia un branch remoto e che il push sia riuscito.
+2. **Scrivi un ricordo.** Avvia Claude nella cartella `app` del workspace su A. Chiedigli di salvare nella memoria automatica una convenzione inventata per questo repo, con un valore scelto al momento. Verifica con `/memory` dove l’ha scritta e chiudi Claude.
+3. **Invia la memoria.** Esegui di nuovo `eng sync demo` su A. Questo passaggio acquisisce anche una memoria creata da Claude per la prima volta. Nell’archivio controlla che il commit inviato contenga la convenzione sotto `workspaces/demo/memory/app/`.
+4. **Ricevila su B.** Da un’installazione con memoria vuota, clona lo stesso archivio. Esegui `eng setup` e `eng sync demo`. Controlla il testo ricevuto nell’archivio, poi avvia Claude nel repo `app`. In una sessione nuova chiedi quale sia la convenzione, senza suggerire il valore né mostrare la chat di A. Verifica che il valore coincida e che `/memory` mostri la memoria del repo.
+5. **Controlla il ritorno.** Su B fai salvare una seconda convenzione, esegui `eng sync demo` su B e poi su A. In una nuova sessione di Claude su A verifica il secondo valore.
 
-Riferimenti: [memoria di Claude Code](https://code.claude.com/docs/en/memory), [variabili d'ambiente](https://code.claude.com/docs/en/env-vars).
+Per verificare anche le regole del workspace e le skill di repo, aggiungi un’istruzione riconoscibile e una skill fittizia al progetto di prova. Controlla cosa appare in Claude avviandolo prima nel workspace e poi nel repo. Registra l’esito insieme alle versioni usate. [Regole e skill](agents.md#skill)
 
 ## Modifiche al comportamento
 
@@ -46,7 +46,7 @@ Il comportamento è descritto in `docs/` e garantito dai test. Una funzione nuov
 
 ## CI
 
-GitHub Actions esegue lint, test e pacchetto su Ubuntu 22.04 e 24.04, poi i controlli su workflow e segreti, compresa la cronologia Git. Le azioni sono fissate a commit verificati e aggiornate da Dependabot. I permessi sono in sola lettura; solo il workflow di release crea una bozza.
+GitHub Actions esegue lint e test su Ubuntu 22.04 e 24.04 per ogni PR e push su `main`. Su entrambi costruisce il pacchetto, verifica il checksum e avvia il programma estratto per controllare la versione. Un job separato controlla i workflow e cerca segreti nei file e nella cronologia Git. Le azioni sono fissate a commit e aggiornate da Dependabot.
 
 ## Release
 

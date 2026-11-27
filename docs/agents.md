@@ -121,4 +121,4 @@ code-review-graph    # mise use -g code-review-graph
 | `code-review-graph` | il programma, il server MCP in Claude Code e in Codex | segnala il server MCP mancante, con il comando per registrarlo |
 | `repomix` | un plugin `@repomix` in Claude Code, la skill `repomix-explorer` per Codex | — |
 
-`eng integrations` mostra le integrazioni attive con lo stato del programma, di Claude e di Codex, e il comando del commento per quelle incomplete. Un'integrazione non elencata non viene né controllata né usata, anche se installata.
+`eng integrations` mostra lo stato di ciascuna integrazione dichiarata. Per Claude installato controlla anche che i plugin richiesti siano abilitati. Se manca qualcosa, mostra il comando scritto nel commento di quella voce.

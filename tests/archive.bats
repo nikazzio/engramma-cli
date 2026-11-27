@@ -157,3 +157,29 @@ teardown() {
 	[ "$(sha256sum "$SYNC")" = "$program_before" ]
 	[ "$(cat "$XDG_CONFIG_HOME/engramma/archive")" = "$ARCHIVE" ]
 }
+
+@test "version works before archive selection and after a command" {
+	for prefix in check save integrations; do
+		run "$SYNC" --data-dir "$TEST_ROOT/missing" "$prefix" --version
+		[ "$status" -eq 0 ]
+		[ "$output" = "Engramma $(cat "$BATS_TEST_DIRNAME/../VERSION")" ]
+	done
+}
+
+@test "zsh completes options and tool targets in context for both command names" {
+	for name in eng engramma; do
+		run zsh -f -c '
+			service="$1"
+			commands[$service]="$2"
+			_describe() { local -a values; values=("${(@P)2}"); print -l -- $values; }
+			compadd() { print -l -- "$@"; }
+			PREFIX=-- CURRENT=3 words=("$service" setup --)
+			source "$3" | grep -q -- --dry-run || exit 1
+			source "$3" | grep -q -- --prune && exit 1
+			PREFIX="" CURRENT=4 words=("$service" tools install "")
+			source "$3" | grep -qx install && exit 1
+			exit 0
+		' _ "$name" "$SYNC" "$BATS_TEST_DIRNAME/../completions/_eng"
+		[ "$status" -eq 0 ]
+	done
+}

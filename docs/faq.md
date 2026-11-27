@@ -28,11 +28,11 @@ eng detach all -n   # cosa verrebbe sostituito
 eng detach all      # ogni collegamento diventa una copia indipendente
 ```
 
-Dopo `detach all` l'archivio si può cancellare: progetti, Claude Code e Codex continuano a funzionare con le copie. `eng detach <ws>` e `eng detach global` fanno lo stesso per un solo workspace o per la configurazione del computer. Ogni copia viene preparata in un file temporaneo e sostituisce il collegamento solo se riuscita.
+Quando `detach all` termina con successo, i progetti su questo computer usano copie locali di note e memoria. Puoi conservare l’archivio per usarlo su altri computer. Se compare un errore, conserva l’archivio e controlla il percorso indicato. `eng detach <ws>` scollega un solo workspace e `eng detach global` scollega la configurazione del computer.
 
 `detach all` toglie anche i comandi `eng` ed `engramma` e i completamenti. Non toglie i repo clonati, i plugin installati, le voci aggiunte alla configurazione di Codex, lo stato in `~/.local/state/engramma` e la configurazione in `~/.config/engramma`.
 
-Per tornare: rimetti nell'archivio il contenuto aggiornato e lancia `eng sync`, che sostituisce da solo le copie identiche.
+Per ricollegare tutto dopo `detach all`, riporta nell’archivio le modifiche fatte alle copie locali. Esegui `~/engramma/bin/sync.sh setup` per ripristinare il comando, poi `eng sync` per ricollegare i workspace presenti.
 
 ## Come aggiorno il programma?
 

@@ -25,12 +25,26 @@ integration_part() {
 			esac
 			;;
 		claude)
+			command -v claude >/dev/null || { echo none; return; }
 			local settings="$CLAUDE_HOME/settings.json"
 			case "$name" in
 				boost) grep -qs 'boost-hook-claude' "$settings" && echo ok || echo missing ;;
-				caveman) grep -qs '"caveman@' "$settings" && echo ok || echo missing ;;
 				code-review-graph) grep -qs '"code-review-graph"' "$HOME/.claude.json" && echo ok || echo missing ;;
-				repomix) grep -qs '@repomix"' "$settings" && echo ok || echo missing ;;
+				caveman | repomix)
+					local pattern='caveman@*'
+					[[ "$name" == repomix ]] && pattern='*@repomix'
+					"$PYTHON" -c '
+import json, sys
+from fnmatch import fnmatchcase
+try:
+    with open(sys.argv[1], encoding="utf-8") as stream:
+        plugins = json.load(stream).get("enabledPlugins", {})
+    enabled = any(fnmatchcase(name, sys.argv[2]) and value is True for name, value in plugins.items())
+except (OSError, ValueError, AttributeError):
+    enabled = False
+sys.exit(0 if enabled else 1)
+' "$settings" "$pattern" && echo ok || echo missing
+					;;
 			esac
 			;;
 		codex)
@@ -80,7 +94,7 @@ integrations_command() {
 			marks+=("$(integration_part "$name" "$part")")
 			[[ "${marks[-1]}" == missing ]] && state=missing
 		done
-		printf '   %s%-20s%s %s%9s%s%7s%s\n' "$TEXT" "$name" "$RESET" \
+		printf '   %s%-20s%s %s%10s%s%8s%s\n' "$TEXT" "$name" "$RESET" \
 			"$(integration_mark "${marks[0]}")" "" "$(integration_mark "${marks[1]}")" "" "$(integration_mark "${marks[2]}")"
 		if [[ "$state" == missing ]]; then
 			incomplete=$((incomplete + 1))
