@@ -28,6 +28,9 @@ if $IS_INTERACTIVE && [[ -z "${NO_COLOR:-}" ]]; then
 else
 	no_colors
 fi
+# shellcheck source=icons.sh
+source "$(dirname "${BASH_SOURCE[0]}")/icons.sh"
+load_icons
 
 # The outcome of a line is a label of the same width on its right, in the color
 # of the outcome: the eye reads one column. OK is what was already in place,
@@ -40,6 +43,10 @@ declare -A BADGES=(
 	[dry]="${CYAN}[ DRY  ]${RESET}" [skip]="${YELLOW}[ SKIP ]${RESET}" [warn]="${YELLOW}[ WARN ]${RESET}"
 	[err]="${RED}[ FAIL ]${RESET}"
 )
+
+declare -A VERBOSE_BADGES=()
+for _badge in "${!BADGES[@]}"; do VERBOSE_BADGES[$_badge]="${BADGES[$_badge]}"; done
+unset _badge
 
 # Labels at the edge of the terminal, but not further than a comfortable line;
 # outside a terminal at 80 columns.
@@ -79,6 +86,26 @@ VERBOSE=false
 # Outcome levels, from the best to the worst.
 LEVEL_FINE=0 LEVEL_DONE=1 LEVEL_INFO=2 LEVEL_DRY=3 LEVEL_WARN=4 LEVEL_ERROR=5
 LEVEL_BADGES=(fine ok info dry warn err)
+
+# The standard output marks an outcome with one colored icon; --verbose keeps
+# the labelled badges. Called again after the options are read.
+use_output_style() {
+	local key
+	if $VERBOSE; then
+		BADGE_WIDTH=8
+		for key in "${!VERBOSE_BADGES[@]}"; do BADGES[$key]="${VERBOSE_BADGES[$key]}"; done
+	else
+		BADGE_WIDTH=1
+		BADGES[ok]="${DONE}$ICON_DONE${RESET}"
+		BADGES[fine]="${GREEN}$ICON_OK${RESET}"
+		BADGES[info]="${BLUE}$ICON_INFO${RESET}"
+		BADGES[dry]="${CYAN}$ICON_DRY${RESET}"
+		BADGES[skip]="${YELLOW}$ICON_SKIP${RESET}"
+		BADGES[warn]="${YELLOW}$ICON_WARN${RESET}"
+		BADGES[err]="${RED}$ICON_ERR${RESET}"
+	fi
+}
+use_output_style
 
 tilde() {
 	echo "${1/#$HOME/\~}"
@@ -293,7 +320,7 @@ fit_line() {
 	text="${text##*$'\r'}"
 	# Characters two columns wide (emoji, ideograms) would wrap the line: only
 	# Latin letters, punctuation, arrows, box drawing and dingbats stay.
-	text="${text//[^ -~ -ɏ‐-⋿─-◿✀-➿]/?}"
+	text="${text//[^ -~ -ɏ‐-⋿─-◿✀-➿$'\xee\x80\x80'-$'\xef\xa3\xbf']/?}"
 	text="${text//$'\t'/  }"
 	(($3 < 1)) && text=""
 	((${#text} > $3 && $3 > 0)) && text="${text:0:$3-1}…"
@@ -665,10 +692,20 @@ render_repos() {
 	done
 }
 
+# The standard header of a block: the icon of its outcome, the title in a column,
+# the outcome, then the detail in grey.
+TITLE_COLUMN=14
+
 block_header() {
-	local outcome="$1"
+	local outcome="$1" pad=""
+	if $VERBOSE; then
+		put ""
+		put " ${TITLE}$BLOCK_TITLE${RESET}${BLOCK_DETAIL:+  ${FILE}$BLOCK_DETAIL${RESET}}${outcome:+  ${RULE}·${RESET} $outcome}$DOTS_MARK${BADGES[${LEVEL_BADGES[BLOCK_LEVEL]}]}"
+		return
+	fi
+	((${#BLOCK_TITLE} < TITLE_COLUMN)) && printf -v pad '%*s' $((TITLE_COLUMN - ${#BLOCK_TITLE})) ''
 	put ""
-	put " ${TITLE}$BLOCK_TITLE${RESET}${BLOCK_DETAIL:+  ${FILE}$BLOCK_DETAIL${RESET}}${outcome:+  ${RULE}·${RESET} $outcome}$DOTS_MARK${BADGES[${LEVEL_BADGES[BLOCK_LEVEL]}]}"
+	put " ${BADGES[${LEVEL_BADGES[BLOCK_LEVEL]}]} ${TITLE}$BLOCK_TITLE${RESET}$pad ${outcome}${BLOCK_DETAIL:+  ${FILE}$BLOCK_DETAIL${RESET}}"
 }
 
 block_outcome() {
@@ -710,15 +747,33 @@ block_end() {
 		done
 	else
 		for text in "${BLOCK_LINES[@]}"; do
+			# The standard output leaves to the summary a warning or a problem of
+			# a block it shows for other reasons: the log keeps the line.
+			if is_summarized_line "$text"; then
+				text="   $text"
+				align_badge text
+				log_line "$text"
+				continue
+			fi
 			put "   $text"
 		done
 	fi
 	log_hidden_lines
 }
 
-# Only warnings, or nothing: the header line says it, the summary lists them.
+# A plain line of a block (not a repo of the tree) that ends in a warning,
+# a skip or an error, shown in the summary of the standard output.
+is_summarized_line() {
+	$VERBOSE && return 1
+	$BLOCK_EXPANDED && return 1
+	[[ "$1" == "  "* ]] || return 1
+	[[ "$1" == *"$BADGE_MARK${BADGES[warn]}" || "$1" == *"$BADGE_MARK${BADGES[err]}" || "$1" == *"$BADGE_MARK${BADGES[skip]}" ]]
+}
+
+# A block that changed nothing is one line: the summary lists what to fix, so
+# the block does not repeat it.
 block_collapsed() {
-	! $VERBOSE && ! $BLOCK_EXPANDED && ((BLOCK_ISSUES == 0 && BLOCK_CHANGES == 0))
+	! $VERBOSE && ! $BLOCK_EXPANDED && ((BLOCK_CHANGES == 0))
 }
 
 # The lines of the block hidden without --verbose, only in the log.
@@ -802,6 +857,49 @@ fix_with() {
 	next_step "$order" "$text"
 }
 
+# Prints "$1" (colored, of visible width $2) followed by "$3", the text wrapped
+# under it. Every continuation line starts with $4.
+put_wrapped() {
+	local first="$1" width="$2" text="$3" indent="$4" room head
+	room=$((OUTPUT_WIDTH - width))
+	((room < 20)) && room=20
+	split_visible "$text" "$room"
+	head="$SPLIT_HEAD" text="$SPLIT_TAIL"
+	put "$first$head"
+	while [[ -n "$text" ]]; do
+		split_visible "$text" "$room"
+		put "$indent$SPLIT_HEAD"
+		text="$SPLIT_TAIL"
+	done
+}
+
+# The standard summary: one entry per message, the icon of its kind, where it
+# comes from, the text, and under it the command that fixes it.
+print_notes_standard() {
+	local wanted="$1" icon="$2" entry kind where message step width=0 label previous="" pad indent
+	for entry in "${NOTES[@]}"; do
+		IFS=$'\t' read -r kind where message step <<<"$entry"
+		[[ "$kind" == "$wanted" ]] || continue
+		((${#where} > width)) && width=${#where}
+	done
+	((width)) || return 0
+	printf -v indent '%*s' $((width + 5)) ''
+	for entry in "${NOTES[@]}"; do
+		IFS=$'\t' read -r kind where message step <<<"$entry"
+		[[ "$kind" == "$wanted" ]] || continue
+		printf -v pad '%*s' $((width - ${#where})) ''
+		# The place is written once for a run of messages from it.
+		if [[ "$where" == "$previous" ]]; then
+			label="${where//?/ }"
+		else
+			label="${REPO}$where${RESET}"
+		fi
+		previous="$where"
+		put_wrapped " $icon $label$pad  ${TEXT}" $((width + 5)) "$message${RESET}" "$indent"
+		[[ -n "$step" ]] && put_wrapped "$indent${DIM}$ICON_FIX${RESET} " $((width + 7)) "$step" "$indent  "
+	done
+}
+
 # One list of the summary: the messages of a kind, aligned on where they come from.
 print_notes() {
 	local wanted="$1" title="$2" color="$3" entry kind where message step width=0 count=0 pad
@@ -840,6 +938,15 @@ SLOW_REPOS=() FAILED_REPOS=()
 
 print_slow_and_failed() {
 	local text
+	if ! $VERBOSE; then
+		((${#FAILED_REPOS[@]})) && put " ${RED}$ICON_ERR${RESET} ${TITLE}repo falliti${RESET}  ${TEXT}$(name_list "${FAILED_REPOS[@]}")${RESET}"
+		if ((${#SLOW_REPOS[@]})); then
+			printf -v text '%s · ' "${SLOW_REPOS[@]}"
+			put " ${YELLOW}$ICON_WARN${RESET} ${TITLE}repo lenti${RESET}  ${DIM}oltre ${SLOW_REPO_SECONDS}s${RESET}  ${text% · }"
+		fi
+		((${#FAILED_REPOS[@]} + ${#SLOW_REPOS[@]})) && put ""
+		return 0
+	fi
 	if ((${#FAILED_REPOS[@]})); then
 		put " ${TITLE}repo falliti${RESET}  ${TEXT}$(name_list "${FAILED_REPOS[@]}")${RESET}$DOTS_MARK${BADGES[err]}"
 	fi
@@ -851,9 +958,43 @@ print_slow_and_failed() {
 	return 0
 }
 
+print_summary_standard() {
+	local elapsed="${DIM}${SECONDS}s${RESET}" separator
+	brand_rule separator $((OUTPUT_WIDTH - 1))
+	put ""
+	put " $separator"
+	put ""
+	if ((${#NOTES[@]})); then
+		print_notes_standard problem "${RED}$ICON_ERR${RESET}"
+		print_notes_standard local "${YELLOW}$ICON_WARN${RESET}"
+		print_notes_standard warning "${BLUE}$ICON_INFO${RESET}"
+		put ""
+	fi
+	print_next_steps
+	print_slow_and_failed
+	if ((PROBLEM_COUNT)); then
+		local noun="problemi da risolvere" icon="${YELLOW}$ICON_WARN${RESET}"
+		((PROBLEM_COUNT == 1)) && noun="problema da risolvere"
+		((${#FAILED_REPOS[@]})) && icon="${RED}$ICON_ERR${RESET}"
+		put " $icon ${BOLD}$PROBLEM_COUNT $noun${RESET}  ${DIM}·${RESET} $elapsed"
+		[[ -n "$LOG_FILE" ]] && put "   ${DIM}log: $(tilde "$LOG_FILE")${RESET}"
+	elif [[ "$MODE" == dry ]]; then
+		put " ${CYAN}$ICON_DRY${RESET} ${BOLD}prova finita${RESET}  ${DIM}·${RESET} $elapsed  ${DIM}· niente è stato modificato${RESET}"
+	else
+		put " ${GREEN}$ICON_OK${RESET} ${BOLD}tutto a posto${RESET}  ${DIM}·${RESET} $elapsed"
+		put ""
+		put "   ${REF}❝${RESET} ${DIM}${QUOTES[RANDOM % ${#QUOTES[@]}]}${RESET}"
+	fi
+	return 0
+}
+
 print_summary() {
 	block_end
 	stop_activity
+	if ! $VERBOSE; then
+		print_summary_standard
+		return 0
+	fi
 	# The rule of the live zone stays, once, between the blocks and the summary.
 	local separator
 	brand_rule separator $((OUTPUT_WIDTH - 1))
@@ -916,6 +1057,15 @@ print_header() {
 		check) mode_label="${DIM}sola lettura${RESET}" ;;
 		*) mode_label="" ;;
 	esac
+	# Standard: the logo only when setting up, a line of title otherwise.
+	if ! $VERBOSE && [[ "$1" != setup* ]]; then
+		local where="senza archivio"
+		[[ -n "$ENGRAMMA_DIR" ]] && where="$(tilde "$ENGRAMMA_DIR")"
+		put ""
+		put " $(brand ◆) $(brand engramma)  ${TITLE}$1${RESET}${mode_label:+  ${RULE}·${RESET} $mode_label}  ${RULE}·${RESET} ${DIM}$(hostname -s 2>/dev/null) · $where${RESET}"
+		start_activity
+		return
+	fi
 	clear_for_header
 	print_logo
 	put ""

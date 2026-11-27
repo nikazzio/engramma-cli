@@ -784,7 +784,7 @@ setup_full_workspace() {
 	ENGRAMMA_VERBOSE= run "$SYNC" check
 	[ "$status" -eq 0 ]
 	[[ "$output" != *"symlink ok"* ]]
-	[[ "$output" =~ " demo  ~/workspace/demo  · "[0-9]+" controlli ok "·+" [  OK  ]" ]]
+	[[ "$output" =~ " o demo "+[0-9]+" controlli ok  ~/workspace/demo" ]]
 	[[ "$output" == *"tutto a posto"* ]]
 
 	ENGRAMMA_VERBOSE= run "$SYNC" check -v

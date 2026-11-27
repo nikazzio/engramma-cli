@@ -15,16 +15,22 @@ run_without_archive() {
 
 	# shellcheck disable=SC2034 # read by the output and link modules
 	MODE=check
+	local argument
 	case "$command" in
 		sync | setup)
 			MODE=run
-			local argument
 			for argument in "$@"; do
 				# shellcheck disable=SC2034 # read by the output and link modules
 				[[ "$argument" == -n || "$argument" == --dry-run ]] && MODE=dry
 			done
 			;;
 	esac
+
+	for argument in "$@"; do
+		# shellcheck disable=SC2034 # read by the output module
+		[[ "$argument" == -v || "$argument" == --verbose ]] && VERBOSE=true
+	done
+	use_output_style
 
 	start_log
 	print_header "$command"

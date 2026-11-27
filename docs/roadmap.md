@@ -9,6 +9,7 @@ Passi verso la prima versione stabile, nell'ordine in cui si fanno.
 | 3 | `eng setup <indirizzo o cartella>` | Collega o clona un archivio esistente, lo valida e ne ricorda il percorso. Un errore non lascia file a metà. | fatto |
 | 4 | Coerenza dei comandi | `init` è un nome riservato. Completamenti, aiuto e guide descrivono i nuovi comandi. `eng` ed `engramma` danno lo stesso risultato. | fatto |
 | 5 | Prove | La suite completa e i controlli di sviluppo passano. Test su copia, backup, conflitti e interruzioni. | fatto |
+| 5b | Interfaccia standard e verbosa | L'output standard è breve: una riga per sezione con l'icona dell'esito, i problemi una sola volta in fondo con il comando che li risolve, il logo solo con `setup`. `-v` mantiene l'output completo. Icone `nerd`, `unicode`, `ascii`. | fatto |
 | 6 | Prova reale | Un utente segue la guida da un'installazione pulita. Due installazioni di Claude ritrovano una memoria scritta dall'altra. [Procedura](development.md#prova-della-memoria-fra-due-computer) | da fare |
 | 7 | Scollegare l'archivio | Dopo `eng detach all` si toglie anche il percorso salvato in `~/.config/engramma/archive`: il programma torna allo stato senza archivio. | da fare |
 | 8 | Passaggio dal programma vecchio | Un archivio con dentro anche il programma diventa solo dati, e i comandi globali usano il programma nuovo. Richiede autorizzazione esplicita. | da fare |
@@ -42,12 +43,15 @@ Nate dalla lettura del codice. Nessuna voce di velocità è stata ancora misurat
 
 ### Grafica
 
+Fatti: intestazione di una riga, set di icone, riepilogo senza ripetizioni.
+
 | Cosa si vede oggi | Proposta |
 |---|---|
-| Ogni lancio spinge fuori schermo un'intera schermata e disegna il logo di quattro righe, anche per un controllo di routine. | Un'intestazione di una riga di default. Il logo resta per `setup`, `init` e `--version`. |
-| Spinner e linee usano caratteri Unicode, senza controllo del locale. | Una versione ASCII quando il terminale non è UTF-8. |
+| I problemi con la stessa causa sono ancora righe separate (tranne i collegamenti `eng`). | Raggruppare per causa: una riga, con l'elenco, e un solo comando. |
+| Le righe di cambiamento dentro i blocchi usano l'icona a destra, il riepilogo a sinistra. | Un solo stile: le modifiche in forma di diff (`+` clonato, `↓` scaricato, `↑` inviato). |
 | I temi sono due: `mocha` (scuro) e `basic`, scelti con `ENGRAMMA_THEME`. | Un tema chiaro, scelta automatica dal terminale e impostazione nel file di configurazione. |
 | Nella zona animata, i caratteri non latini diventano `?`. | Gestire la larghezza dei caratteri, così i nomi non latini restano leggibili. |
 | Non esiste un'uscita per le macchine. | `--json` per CI e hook, e `--plain` per avere in un terminale l'output senza zona animata. |
+| L'output verboso ha ancora le etichette `[ OK ]`. | Lo stesso linguaggio di icone anche con `-v`. |
 
 Ordine consigliato: prima l'affidabilità (scritture atomiche, blocco, risultati senza `source`), poi le misure di velocità, infine la grafica.

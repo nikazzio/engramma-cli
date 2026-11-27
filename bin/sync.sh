@@ -222,6 +222,8 @@ while [[ $# -gt 0 ]]; do
 	shift
 done
 
+use_output_style
+
 case "$COMMAND" in
 	sync | setup | detach) [[ "$MODE" == dry ]] || MODE=run ;;
 	check | list | session-start | tools)

@@ -19,3 +19,5 @@
 - Lo scollegamento segnala copie e sostituzioni fallite. La guida descrive come verificare lo scambio della memoria fra due installazioni.
 - `eng` parte anche senza archivio: mostra la schermata, segnala il problema e controlla i comandi `eng`, mise e git. `eng setup` crea i comandi anche in quel caso.
 - `eng init` crea un archivio nuovo da un esempio. `eng setup <indirizzo o cartella>` collega o clona un archivio esistente. Entrambi ricordano il percorso e non sovrascrivono niente.
+- L'output standard è più breve: una riga per sezione con l'icona dell'esito, i problemi elencati una sola volta in fondo con il comando che li risolve, il logo solo con `eng setup`. `-v` mantiene l'output completo. Icone `nerd`, `unicode` o `ascii` con `ENGRAMMA_ICONS` o `icons` nel file di configurazione.
+- I collegamenti `eng` ed `engramma` che puntano a un'altra copia del programma sono un solo problema, con il comando per riportarli qui.

@@ -80,7 +80,6 @@ log_files() {
 	[ "$status" -eq 0 ]
 	local log
 	log="$(log_files | tail -n 1)"
-	[[ "$output" == *"log: ~/.local/state/engramma/logs/$(basename "$log")"* ]]
 	grep -q 'localhost.demo.test nel file hosts' "$log"
 	grep -q 'tutto a posto' "$log"
 	! grep -q $'\e' "$log"
@@ -141,7 +140,7 @@ log_files() {
 	[[ "$body" == *"POSTAZIONE"*"AGENTI"*"WORKSPACE"* ]]
 	[[ "$body" == *"demo"*"1 avviso"* ]]
 	[[ "$body" != *"1 file non committato"* ]]
-	[[ "$output" == *"modifiche locali e repo non aggiornati (1)"*"demo/alpha  1 file non committato"* ]]
+	[[ "$output" == *"demo/alpha"*"1 file non committato"* ]]
 }
 
 @test "a workspace named on the command line shows its details" {
@@ -161,7 +160,72 @@ log_files() {
 	echo 'skill mancante  # installa-la-skill' >"$ENGRAMMA_DIR/global/codex/plugins.txt"
 
 	PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check
-	[[ "$output" == *"da sistemare ("*"skill mancante assente in Codex"$'\n'*"→ installa-la-skill"* ]]
-	[[ "$output" == *"operazione conclusa: "*" da risolvere"*"[ WARN ]"* ]]
+	[[ "$output" == *"skill mancante assente in Codex"$'\n'*"> installa-la-skill"* ]]
+	[[ "$output" == *" da risolvere"* ]]
 	[[ "$output" != *"eng sync sistema quelle automatiche"* ]]
+}
+
+# ── standard and verbose output ──────────────────────────────────────────────
+
+@test "the standard output names a problem once, in the summary, not in the block too" {
+	run "$SYNC" check demo
+	[ "$status" -eq 1 ]
+	local first rest
+	first="$(grep -c "memoria del workspace" <<<"$output")"
+	[ "$first" -ge 1 ]
+	run "$SYNC" check
+	[ "$status" -eq 1 ]
+	[ "$(grep -c "comando eng: symlink mancante" <<<"$output")" -eq 1 ]
+}
+
+@test "the standard output is a line of title, without the logo, except for setup" {
+	run "$SYNC" check
+	[[ "$output" != *"┏━╸┏┓╻"* ]]
+	run "$SYNC" setup -n
+	[[ "$output" == *"┏━╸┏┓╻"* ]]
+}
+
+@test "verbose output keeps the logo and the labelled badges" {
+	run "$SYNC" check -v
+	[[ "$output" == *"┏━╸┏┓╻"* ]]
+	[[ "$output" == *"[ OK ]"* || "$output" == *"[ WARN ]"* ]]
+}
+
+@test "icons are ASCII outside a terminal and follow ENGRAMMA_ICONS" {
+	run "$SYNC" check
+	[[ "$output" != *"✖"* && "$output" != *$'\xef\x80\x8d'* ]]
+	run env ENGRAMMA_ICONS=unicode "$SYNC" check
+	[[ "$output" == *"✖"* ]]
+	run env ENGRAMMA_ICONS=nerd "$SYNC" check
+	[[ "$output" == *$'\xef\x80\x8d'* ]]
+}
+
+@test "the configuration file picks the icon set and an unknown name falls back" {
+	mkdir -p "$XDG_CONFIG_HOME/engramma"
+	printf 'icons = unicode\n' >"$XDG_CONFIG_HOME/engramma/config"
+	run "$SYNC" check
+	[[ "$output" == *"✖"* ]]
+	printf 'icons = emoji\n' >"$XDG_CONFIG_HOME/engramma/config"
+	run "$SYNC" check
+	[[ "$output" != *"✖"* ]]
+}
+
+@test "links to another copy of the program are one problem with its command" {
+	mkdir -p "$HOME/.local/bin" "$TEST_ROOT/other"
+	: >"$TEST_ROOT/other/sync.sh"
+	ln -s "$TEST_ROOT/other/sync.sh" "$HOME/.local/bin/eng"
+	ln -s "$TEST_ROOT/other/sync.sh" "$HOME/.local/bin/engramma"
+	run "$SYNC" check
+	[ "$(grep -c "un'altra copia del programma" <<<"$output")" -eq 1 ]
+	[[ "$output" == *"ln -sfn"* ]]
+	[ "$(readlink "$HOME/.local/bin/eng")" = "$TEST_ROOT/other/sync.sh" ]
+}
+
+@test "the log path is shown when something is wrong, not when all is well" {
+	run "$SYNC" check
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"log: ~/.local/state/engramma/logs/"* ]]
+	"$SYNC" sync demo >/dev/null
+	run "$SYNC" check demo
+	[[ "$output" != *"log: ~"* ]]
 }

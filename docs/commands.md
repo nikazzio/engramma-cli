@@ -46,7 +46,7 @@ Il controllo elenca anche il lavoro da non perdere: file non committati, commit 
 |---|---|---|
 | `--data-dir <dir>` | tutti, prima del comando | Usa un altro archivio solo per questa esecuzione. |
 | `-n`, `--dry-run` | `init`, `sync`, `setup`, `detach` | Mostra cosa farebbe, senza farlo. |
-| `-v`, `--verbose` | tutti tranne `save`, `new` e `add` | Mostra anche i controlli andati bene. |
+| `-v`, `--verbose` | tutti tranne `save`, `new` e `add` | Output completo: logo, ogni controllo andato bene, etichette `[ OK ]` e `[ WARN ]`. |
 | `--path <dir>` | `sync` di un solo workspace | Dove stanno i suoi repo su questo computer. Viene ricordato in `~/.config/engramma/paths`. |
 | `-j`, `--jobs <n>` | `sync` | Quanti repo clonare o aggiornare insieme (default 3, o il valore di `~/.config/engramma/config`). |
 | `--prune` | `sync` | Cancella senza chiedere i branch locali già mergiati o rimossi dal remoto, **anche quelli con commit solo locali**. |
@@ -58,7 +58,16 @@ Il controllo elenca anche il lavoro da non perdere: file non committati, commit 
 ```
 parallel = true   # false: un repo alla volta
 threads = 3
+icons = nerd      # nerd, unicode o ascii
 ```
+
+## Output
+
+L'output standard è breve: una riga di titolo, una riga per sezione con l'icona dell'esito (`✔` a posto, `▲` avviso, `✖` problema, `+` fatto, `◇` prova), poi in fondo l'elenco di ciò che va sistemato, ognuno con il comando che lo risolve. Una sezione senza modifiche non ripete i problemi: li elenca solo il riepilogo. Il logo compare solo con `eng setup`. Con `-v` si vede tutto: logo, ogni controllo e i dettagli di ogni sezione. `eng <ws>` mostra per esteso solo quel workspace.
+
+Le icone hanno tre set. `nerd` usa i glifi dei Nerd Font ed è il default in un terminale: se nel terminale non c'è un Nerd Font compaiono quadratini vuoti. `unicode` usa simboli comuni. `ascii` usa lettere e segni (`o`, `!`, `x`) ed è il default fuori da un terminale, nei log e nelle pipe. Si sceglie con `ENGRAMMA_ICONS=nerd|unicode|ascii` oppure con la riga `icons = unicode` in `~/.config/engramma/config`.
+
+La zona animata in fondo allo schermo (spinner, avanzamento, tempo) compare solo in un terminale con i colori.
 
 ## Nomi riservati
 
@@ -99,6 +108,7 @@ Il riepilogo finale raccoglie cosa sistemare, con il comando sotto ogni voce. Og
 | `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_DATA_HOME` | Dove stanno configurazione, stato, log, backup e completamenti. |
 | `ENGRAMMA_MISE` | Il mise da usare, al posto di quello nel `PATH`. |
 | `ENGRAMMA_THEME` | Colori: `mocha` o `basic`. |
+| `ENGRAMMA_ICONS` | Icone: `nerd`, `unicode` o `ascii`. Vince sul file di configurazione. |
 | `ENGRAMMA_SLOW_REPO_SECONDS` | Dopo quanti secondi un repo è "lento" nel riepilogo (default 30). |
 | `NO_COLOR` | Output senza colori né zona animata. |
 | `PAGER` | Programma per `eng log` (default `less`). |

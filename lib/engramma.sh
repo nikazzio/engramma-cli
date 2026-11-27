@@ -129,15 +129,32 @@ report_engramma_unsaved() {
 	fi
 }
 
+# Links that point into another copy of the program are one problem, not one per
+# link: they are reported together, with the command that points them here.
 ensure_engramma_command() {
-	ensure_link "$PROGRAM_DIR/bin/sync.sh" "$ENGRAMMA_COMMAND_LINK" "comando engramma"
-	ensure_link "$PROGRAM_DIR/bin/sync.sh" "$ENGRAMMA_SHORT_LINK" "comando eng"
-	local entry file link
+	local entry file link target elsewhere=() fix=()
+	local wanted=(
+		"$PROGRAM_DIR/bin/sync.sh|$ENGRAMMA_COMMAND_LINK|comando engramma"
+		"$PROGRAM_DIR/bin/sync.sh|$ENGRAMMA_SHORT_LINK|comando eng"
+	)
 	for entry in "${ENGRAMMA_COMPLETIONS[@]}"; do
 		read -r file link <<<"$entry"
 		[[ -f "$PROGRAM_DIR/completions/$file" ]] || continue
-		ensure_link "$PROGRAM_DIR/completions/$file" "$link" "completamento $(basename "$link")"
+		wanted+=("$PROGRAM_DIR/completions/$file|$link|completamento $(basename "$link")")
 	done
+	for entry in "${wanted[@]}"; do
+		IFS='|' read -r file link target <<<"$entry"
+		if [[ -L "$link" && "$(readlink "$link")" != "$file" ]]; then
+			elsewhere+=("$link")
+			fix+=("ln -sfn $(tilde "$file") $(tilde "$link")")
+			continue
+		fi
+		ensure_link "$file" "$link" "$target"
+	done
+	if ((${#elsewhere[@]})); then
+		problem "${REF}eng${RESET} ed ${REF}engramma${RESET} puntano a un'altra copia del programma: $(path "$(dirname "$(dirname "$(readlink "${elsewhere[0]}")")")") ${DIM}(non li tocco)${RESET}"
+		fix_with 5 "${CMD}$(printf '%s && ' "${fix[@]}" | sed 's/ && $//')${RESET}"
+	fi
 	if [[ -L "$ENGRAMMA_COMMAND_LINK" && ":$PATH:" != *":$(dirname "$ENGRAMMA_COMMAND_LINK"):"* ]]; then
 		warn "$(path "$(dirname "$ENGRAMMA_COMMAND_LINK")") non è nel PATH: eng ed engramma non si trovano"
 	fi
