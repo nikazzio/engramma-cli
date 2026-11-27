@@ -78,7 +78,7 @@ report_engramma() {
 	check_git_lock "$ENGRAMMA_DIR"
 	report_engramma_updates
 	report_engramma_unsaved
-	[[ "${1:-}" == read-only ]] || ensure_engramma_command
+	ensure_engramma_command
 }
 
 report_engramma_updates() {
