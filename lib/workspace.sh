@@ -7,8 +7,15 @@ read_list_file() {
 	grep -vE '^[[:space:]]*(#|$)' "$file"
 }
 
+# The entries of a list file without their trailing "# comment", for the files
+# where a comment never carries data (requires.txt and integrations.txt do).
+read_list_entries() {
+	read_list_file "$1" | sed -E 's/[[:space:]]*#.*$//' | grep -vE '^[[:space:]]*$'
+	return 0
+}
+
 repo_entries() {
-	read_list_file "$WORKSPACE_NOTES_DIR/repos.txt"
+	read_list_entries "$WORKSPACE_NOTES_DIR/repos.txt"
 }
 
 PATHS_FILE="${XDG_CONFIG_HOME:-$HOME/.config}/engramma/paths"
@@ -42,7 +49,7 @@ saved_workspace_path() {
 
 default_workspace_path() {
 	local location
-	location="$(read_list_file "$WORKSPACE_NOTES_DIR/location.txt" | head -n 1)"
+	location="$(read_list_entries "$WORKSPACE_NOTES_DIR/location.txt" | head -n 1)"
 	echo "$DEFAULT_WORKSPACES_ROOT/${location:-$WORKSPACE_NAME}"
 }
 

@@ -157,7 +157,9 @@ complete_eng() {
 	[[ "$(complete_eng "")" == *"sync"*"setup"*"detach"* ]]
 	[[ "$(complete_eng "")" == *"demo"* ]]
 	[ "$(complete_eng --data-dir "$ENGRAMMA_DIR" save "")" = $'global\ndemo' ]
-	[[ "$(complete_eng detach "")" == *"all"* ]]
+	[[ "$(complete_eng detach "")" == *"all"*"global"* ]]
+	[ "$(complete_eng --data-dir "$ENGRAMMA_DIR" sync "")" = $'global\ndemo' ]
+	[[ "$(complete_eng "")" == *"check"* ]]
 	[ "$(complete_eng sync --pr)" = "--prune" ]
 	[ "$(complete_eng sync -j "")" = "" ]
 }
@@ -177,6 +179,27 @@ complete_eng() {
 
 	run "$SYNC" save demo
 	[[ "$output" == *"niente da salvare"* ]]
+}
+
+@test "save, new and add refuse options instead of storing them as data" {
+	run "$SYNC" save demo --dry-run
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"non accetta opzioni"* ]]
+	run "$SYNC" new prova -n
+	[ "$status" -eq 1 ]
+	[ ! -e "$ENGRAMMA_DIR/workspaces/prova" ]
+	run "$SYNC" add demo git@example.com:team/x.git -n
+	[ "$status" -eq 1 ]
+	! grep -q -- "-n" "$NOTES/repos.txt"
+}
+
+@test "save global works without a skills folder" {
+	mkdir -p "$ENGRAMMA_DIR/global"
+	echo "nuovo" >"$ENGRAMMA_DIR/global/file.txt"
+	[ ! -e "$ENGRAMMA_DIR/skills" ]
+	run "$SYNC" save global
+	[ "$status" -eq 0 ]
+	[ "$(git -C "$ENGRAMMA_DIR" log -1 --format=%s)" = "chore(global): update global configuration" ]
 }
 
 @test "save retries a failed push when there are no new files" {
@@ -239,7 +262,33 @@ complete_eng() {
 
 	run "$SYNC" add prova https://example.com/team/prova-api.git
 	[ "$status" -eq 1 ]
+
+	printf 'prova-web git@example.com:team/prova-web.git' >>"$ENGRAMMA_DIR/workspaces/prova/repos.txt"
+	run "$SYNC" add prova git@example.com:team/prova-docs.git
+	grep -qx 'prova-web git@example.com:team/prova-web.git' "$ENGRAMMA_DIR/workspaces/prova/repos.txt"
+	grep -qx 'prova-docs git@example.com:team/prova-docs.git' "$ENGRAMMA_DIR/workspaces/prova/repos.txt"
 	run "$SYNC" new prova
+	[ "$status" -eq 1 ]
+}
+
+@test "new refuses the names of commands and of the global part" {
+	local name
+	for name in sync check global all help; do
+		run "$SYNC" new "$name"
+		[ "$status" -eq 1 ]
+		[[ "$output" == *"riservato"* ]]
+		[ ! -e "$ENGRAMMA_DIR/workspaces/$name" ]
+	done
+}
+
+@test "help names check as the default command, in plain words" {
+	run "$SYNC" --help
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"check"*"controlla"* ]]
+	[[ "$output" == *"global"* ]]
+	[[ "$output" != *"drift"* && "$output" != *"proiettato"* ]]
+
+	run "$SYNC" --session-start
 	[ "$status" -eq 1 ]
 }
 

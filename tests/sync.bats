@@ -196,6 +196,20 @@ teardown() {
 	[ "$status" -eq 0 ]
 }
 
+@test "never links a personal file over one versioned by the repo" {
+	"$SYNC" sync demo >/dev/null
+	echo "services: {}" >"$WORKSPACE/beta/compose.yaml"
+	git -C "$WORKSPACE/beta" add compose.yaml
+	git -C "$WORKSPACE/beta" commit --quiet -m "compose del team"
+	mkdir -p "$NOTES/repo-files/beta"
+	echo "services: {}" >"$NOTES/repo-files/beta/compose.yaml"
+
+	run "$SYNC" sync demo
+	[ ! -L "$WORKSPACE/beta/compose.yaml" ]
+	[ -z "$(git -C "$WORKSPACE/beta" status --porcelain)" ]
+	[[ "$output" == *"compose.yaml"*"versionato nel repo"* ]]
+}
+
 @test "excludes local-only files listed in excludes.txt" {
 	echo "beta .env" >"$NOTES/excludes.txt"
 	"$SYNC" sync demo >/dev/null
@@ -212,6 +226,28 @@ teardown() {
 
 	run "$SYNC" sync demo
 	[[ "$output" != *"file con modifiche non committate: aggiornamento saltato"* ]]
+}
+
+@test "any SSH server that accepts the key counts as authenticated, whatever it prints" {
+	mkdir -p "$TEST_ROOT/bin"
+	printf '#!/bin/sh\necho "logged in as utente"\nexit 0\n' >"$TEST_ROOT/bin/ssh"
+	chmod +x "$TEST_ROOT/bin/ssh"
+	echo "remoto git@example.test:team/remoto.git" >>"$NOTES/repos.txt"
+	PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check demo
+	[[ "$output" == *"ssh example.test autenticato"* ]]
+
+	printf '#!/bin/sh\necho "Permission denied (publickey)." >&2\nexit 255\n' >"$TEST_ROOT/bin/ssh"
+	PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check demo
+	[[ "$output" == *"ssh example.test non autenticato"*"Permission denied"* ]]
+}
+
+@test "a comment at the end of a line is not a field" {
+	sed -i "s#^beta .*#beta $(remote_path beta)   \# repo di prova#" "$NOTES/repos.txt"
+	echo "demo.test   # sito locale" >"$NOTES/hosts.txt"
+	echo "127.0.0.1 demo.test" >"$ENGRAMMA_HOSTS_FILE"
+	run "$SYNC" sync demo
+	[ "$status" -eq 0 ]
+	[ "$(current_branch beta)" = main ]
 }
 
 @test "uses the main branch given in repos.txt" {
@@ -252,7 +288,8 @@ teardown() {
 	[ "$status" -eq 0 ]
 	[ "$(readlink "$unversioned")" = "$NOTES/memory/beta" ]
 	[ "$(cat "$NOTES/memory/beta/MEMORY.md")" = "- ricordo" ]
-	ls "$ENGRAMMA_DIR"/backup/adopted/*/* >/dev/null
+	ls "$XDG_STATE_HOME"/engramma/backup/adopted/*/* >/dev/null
+	[ ! -e "$ENGRAMMA_DIR/backup" ]
 }
 
 @test "leaves the original memory intact when its backup fails" {
@@ -320,7 +357,7 @@ EOF
 	[[ "$output" == *"copia non riuscita"* ]]
 	[ ! -L "$unversioned" ]
 	[ "$(cat "$unversioned/MEMORY.md")" = "ricordo originale" ]
-	[ -n "$(find "$ENGRAMMA_DIR/backup/adopted" -name MEMORY.md -type f)" ]
+	[ -n "$(find "$XDG_STATE_HOME/engramma/backup/adopted" -name MEMORY.md -type f)" ]
 }
 
 @test "does not overwrite a file created in the destination during adoption" {
@@ -391,7 +428,7 @@ EOF
 	original="$(find "$(dirname "$unversioned")" -path '*/memory.engramma-*/original/MEMORY.md' -type f -print -quit)"
 	[ -n "$original" ]
 	[ "$(cat "$original")" = "ricordo originale" ]
-	[ -n "$(find "$ENGRAMMA_DIR/backup/adopted" -name MEMORY.md -type f)" ]
+	[ -n "$(find "$XDG_STATE_HOME/engramma/backup/adopted" -name MEMORY.md -type f)" ]
 	run "$SYNC" sync demo
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"acquisizione interrotta; cartella originale conservata"* ]]
@@ -565,7 +602,7 @@ EOF
 	[ "$status" -eq 0 ]
 	[ "$(readlink "$ENGRAMMA_CLAUDE_HOME/skills/esempio")" = "$ENGRAMMA_DIR/skills/esempio" ]
 
-	run "$SYNC" check demo
+	run "$SYNC" check global
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"skill esempio → symlink ok"* ]]
 }
@@ -585,7 +622,7 @@ EOF
 	echo "strumento  # installata da uno strumento" >"$ENGRAMMA_DIR/skills-ignore.txt"
 	"$SYNC" sync demo >/dev/null
 
-	run "$SYNC" check demo
+	run "$SYNC" check global
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"skill mia non versionata"* ]]
 	[[ "$output" != *"skill strumento"* ]]
@@ -600,7 +637,7 @@ EOF
 	ln -s "$TEST_ROOT/altrove/esterna" "$ENGRAMMA_CLAUDE_HOME/skills/esterna"
 	ln -s "$TEST_ROOT/altrove/sparita" "$ENGRAMMA_CLAUDE_HOME/skills/sparita"
 
-	run "$SYNC" check demo
+	run "$SYNC" check global
 	[[ "$output" == *"skill esempio: non è più in engramma, symlink rimasto"* ]]
 	[ -L "$ENGRAMMA_CLAUDE_HOME/skills/esempio" ]
 
@@ -714,10 +751,19 @@ setup_full_workspace() {
 }
 
 
-@test "a workspace named alone means sync" {
+@test "a workspace named alone is a read-only check of that workspace" {
+	local before
+	before="$(snapshot)"
+	run "$SYNC" demo
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"demo"* ]]
+	[[ "$output" != *"POSTAZIONE"* ]]
+	[ "$(snapshot)" = "$before" ]
+	[ ! -e "$WORKSPACE/alpha" ]
+
+	"$SYNC" sync demo >/dev/null
 	run "$SYNC" demo
 	[ "$status" -eq 0 ]
-	[ "$(current_branch alpha)" = develop ]
 }
 
 @test "without a workspace sync and check cover the workspaces present on this computer" {

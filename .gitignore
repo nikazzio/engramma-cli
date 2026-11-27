@@ -1,8 +1,6 @@
 /.tools/
 /dist/
 /backup/
-/.boost/
-/.code-review-graph/
 /workspaces/
 /global/
 /skills/

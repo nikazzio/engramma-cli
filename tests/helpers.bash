@@ -47,7 +47,16 @@ setup_sandbox() {
 	export ENGRAMMA_NO_MISE=1
 	# A real mise found on PATH keeps its data outside the sandbox home.
 	export MISE_DATA_DIR="$TEST_ROOT/mise-data" MISE_STATE_DIR="$TEST_ROOT/mise-state" MISE_CACHE_DIR="$TEST_ROOT/mise-cache"
-	mkdir -p "$HOME"
+	# The mise engramma requires: a stub that knows no tools, already activated.
+	export ENGRAMMA_MISE="$TEST_ROOT/mise-stub/mise"
+	mkdir -p "$HOME" "$(dirname "$ENGRAMMA_MISE")"
+	# shellcheck disable=SC2016 # the stub and the rc files get these lines literally
+	printf '#!/bin/sh\n[ "$1" = ls ] && echo "{}"\nexit 0\n' >"$ENGRAMMA_MISE"
+	chmod +x "$ENGRAMMA_MISE"
+	# shellcheck disable=SC2016
+	echo 'eval "$(mise activate bash)"' >"$HOME/.bashrc"
+	# shellcheck disable=SC2016
+	echo 'eval "$(mise activate zsh)"' >"$HOME/.zshrc"
 
 	WORKSPACE="$HOME/workspace/demo"
 	NOTES="$ENGRAMMA_DIR/workspaces/demo"

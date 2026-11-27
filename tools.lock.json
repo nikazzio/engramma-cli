@@ -1,17 +1,4 @@
 {
-  "openspec": {
-    "version": "1.16.0",
-    "platforms": {
-      "linux-x64": {
-        "url": "https://github.com/Fission-AI/OpenSpec/releases/download/v1.16.0/openspec-linux-x64.tar.gz",
-        "sha256": "f27fb2ff5c6c4aafb207cb0b797189215adb3a1150d4b4600a2d6a0b6e192ae1"
-      },
-      "linux-arm64": {
-        "url": "https://github.com/Fission-AI/OpenSpec/releases/download/v1.16.0/openspec-linux-arm64.tar.gz",
-        "sha256": "b9b61371a7caa1819da34f766cc24896cfe7a743841f53121b66bd1e2f1b9e93"
-      }
-    }
-  },
   "actionlint": {
     "version": "1.7.12",
     "platforms": {

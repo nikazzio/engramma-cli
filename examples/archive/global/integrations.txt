@@ -1,0 +1,2 @@
+# Integrazioni degli agenti attive: <nome>  # come installarla
+# Disponibili: boost, caveman, code-review-graph, repomix (vedi docs/agents.md)

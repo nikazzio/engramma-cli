@@ -8,12 +8,13 @@ what the two had in common after the last merge. For every value:
 - changed only on the computer: copied into engramma ("adopted");
 - changed only in engramma: copied onto the computer ("applied");
 - changed on both sides in different ways: a conflict, left as it is until
-  chosen with --choose <number>=computer|engramma.
+  chosen with --choose <path>=computer|engramma.
 
 Objects are merged key by key; anything else (arrays included) is one value.
 Without a base every key present on one side only is taken, as if added there.
+A computer file emptied to {} is merged without a base: it never empties engramma.
 
-Usage: json_merge.py <engramma> <computer> <base> <run|dry> [--choose N=side]...
+Usage: json_merge.py <engramma> <computer> <base> <run|dry> [--choose path=side]...
 Prints one tab-separated line per change: kind, path, detail. Kinds: applied,
 adopted, conflict, invalid. In run mode it writes the files that changed.
 """
@@ -53,7 +54,6 @@ class Merge:
     def __init__(self, choices):
         self.choices = choices
         self.events = []
-        self.conflicts = 0
 
     def walk(self, engramma, computer, base, path):
         """Returns (engramma, computer, base) after the merge of one value."""
@@ -71,8 +71,7 @@ class Merge:
         if computer == base:
             self.events.append(("applied", name, f"{describe(computer)} → {describe(engramma)}"))
             return engramma, engramma, engramma
-        self.conflicts += 1
-        choice = self.choices.get(self.conflicts)
+        choice = self.choices.get(name)
         if choice == "computer":
             self.events.append(("adopted", name, f"{describe(engramma)} → {describe(computer)}"))
             return computer, computer, computer
@@ -108,8 +107,8 @@ def parse_choices(arguments):
     choices = {}
     for index, argument in enumerate(arguments):
         if argument == "--choose" and index + 1 < len(arguments):
-            number, _, side = arguments[index + 1].partition("=")
-            choices[int(number)] = side
+            path, _, side = arguments[index + 1].rpartition("=")
+            choices[path] = side
     return choices
 
 
@@ -125,6 +124,8 @@ def main(arguments):
         return 0
     if computer is MISSING:
         computer, base = engramma, engramma
+    elif computer == {}:
+        base = MISSING
 
     merge = Merge(parse_choices(arguments[4:]))
     new_engramma, new_computer, new_base = merge.walk(engramma, computer, base, [])

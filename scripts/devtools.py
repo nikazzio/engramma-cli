@@ -45,7 +45,7 @@ def install(name, entry, target):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["install"])
-    parser.add_argument("tools", nargs="*", choices=["openspec", "actionlint", "gitleaks"])
+    parser.add_argument("tools", nargs="*", choices=["actionlint", "gitleaks"])
     args = parser.parse_args()
     machine = {"x86_64": "x64", "aarch64": "arm64"}.get(platform.machine())
     if platform.system() != "Linux" or machine is None:

@@ -79,7 +79,7 @@ report_repo_in_place_of_link() {
 # existed, a copy left by detach): the files engramma lacks are moved into it,
 # the identical ones dropped, then the folder becomes a link. Files that differ
 # from engramma stop everything, so nothing is ever overwritten; a backup of the
-# whole folder stays in engramma/backup/ (not versioned).
+# whole folder stays in $BACKUP_DIR, outside the archive.
 adopt_directory() {
 	local target="$1" link="$2" label="$3" adopt="$4" relative new=() different=()
 	if [[ -n "$(find "$link" -mindepth 1 ! -type f ! -type d -print -quit)" ]]; then
@@ -112,7 +112,7 @@ adopt_directory() {
 		check) problem "${REF}$label${RESET}: cartella locale al posto del symlink ${DIM}(eng sync la unisce a engramma: ${#new[@]} file nuovi)${RESET}" ;;
 		*)
 			local backup staging
-			backup="$ENGRAMMA_DIR/backup/adopted/$BACKUP_STAMP/$(claude_project_key "$link")"
+			backup="$BACKUP_DIR/adopted/$BACKUP_STAMP/$(claude_project_key "$link")"
 			if [[ -e "$backup" ]] || ! mkdir -p "$(dirname "$backup")" "$target" ||
 				! cp -a "$link" "$backup" || ! diff -qr "$link" "$backup" >/dev/null; then
 				problem "${REF}$label${RESET}: backup non riuscito o diverso dall'originale; cartella locale intatta"
@@ -262,10 +262,17 @@ ensure_repo_files() {
 	local files_dir="$WORKSPACE_NOTES_DIR/repo-files/$name"
 	[[ -d "$files_dir" ]] || return 0
 
+	local file
 	for source in "$files_dir"/* "$files_dir"/.[!.]*; do
 		[[ -e "$source" ]] || continue
-		ensure_link "$source" "$repo/$(basename "$source")" "$(basename "$source")"
-		ensure_excluded "$repo" "/$(basename "$source")"
+		file="$(basename "$source")"
+		# A file the team versions stays theirs: a link would show up as a change.
+		if [[ -n "$(git -C "$repo" ls-files -- ":(literal)$file" 2>/dev/null)" ]]; then
+			problem "${FILE}$file${RESET}: versionato nel repo, non lo collego ${DIM}(repo-files/$name/$file)${RESET}"
+			continue
+		fi
+		ensure_link "$source" "$repo/$file" "$file"
+		ensure_excluded "$repo" "/$file"
 	done
 }
 
@@ -296,7 +303,7 @@ ensure_repo_excludes() {
 	local repo="$1" name="$2" entry pattern
 	while read -r entry pattern; do
 		[[ "$entry" == "$name" ]] && ensure_excluded "$repo" "$pattern"
-	done < <(read_list_file "$WORKSPACE_NOTES_DIR/excludes.txt")
+	done < <(read_list_entries "$WORKSPACE_NOTES_DIR/excludes.txt")
 }
 
 link_workspace_notes() {
@@ -310,7 +317,7 @@ link_workspace_notes() {
 	fi
 
 	local entry
-	for entry in .claude docs AGENTS.md; do
+	for entry in .claude docs AGENTS.md mise.toml; do
 		[[ -e "$WORKSPACE_NOTES_DIR/$entry" ]] || continue
 		ensure_link "$WORKSPACE_NOTES_DIR/$entry" "$WORKSPACE_DIR/$entry" "$entry"
 	done

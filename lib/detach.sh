@@ -64,7 +64,7 @@ detach_workspace() {
 	local entry name
 
 	section "appunti"
-	for entry in .claude docs AGENTS.md; do
+	for entry in .claude docs AGENTS.md mise.toml; do
 		detach_link "$WORKSPACE_DIR/$entry" "$entry"
 	done
 

@@ -75,7 +75,7 @@ class DevelopmentToolTests(unittest.TestCase):
             result = subprocess.CompletedProcess([], 0, stdout=b"altered download")
             with patch.object(installer.subprocess, "run", return_value=result):
                 with self.assertRaises(ValueError):
-                    installer.install("openspec", {"url": "https://example.test/tool", "sha256": "0" * 64}, target)
+                    installer.install("actionlint", {"url": "https://example.test/tool", "sha256": "0" * 64}, target)
             self.assertFalse(target.exists())
 
 

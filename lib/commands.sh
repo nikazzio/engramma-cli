@@ -13,7 +13,8 @@ save_engramma() {
 	local area="${1:-}" message="${2:-}" paths=() changed ahead
 	[[ -n "$area" ]] || fail_usage "eng save vuole un workspace, oppure global"
 	if [[ "$area" == global ]]; then
-		paths=(global skills)
+		paths=(global)
+		[[ -d "$ENGRAMMA_DIR/skills" ]] && paths+=(skills)
 		message="${message:-chore(global): update global configuration}"
 	else
 		is_workspace "$area" || fail_usage "Workspace sconosciuto: '$area' (ci sono: $(available_workspaces), oppure global)"
@@ -95,6 +96,8 @@ send_workspace_updates() {
 new_workspace() {
 	local name="${1:-}" location="${2:-}" dir
 	[[ "$name" =~ ^[a-z0-9][a-z0-9._-]*$ ]] || fail_usage "eng new vuole un nome di workspace (minuscole, cifre, - . _)"
+	# "eng <name>" must stay unambiguous: a command or "global" always wins.
+	[[ " $RESERVED_NAMES " != *" $name "* ]] || fail_usage "'$name' è un nome riservato ai comandi di eng: scegline un altro"
 	dir="$ENGRAMMA_DIR/workspaces/$name"
 	[[ ! -e "$dir" ]] || { say_fail "il workspace $name esiste già"; return 1; }
 	mkdir -p "$dir"
@@ -127,6 +130,8 @@ add_repo() {
 		say_fail "$folder è già in $(path "$file")"
 		return 1
 	fi
+	# A last line without its newline would swallow the new entry.
+	[[ -s "$file" && "$(tail -c 1 "$file")" != "" ]] && echo >>"$file"
 	echo "$folder $url${branch:+ $branch}" >>"$file"
 	say_done "${TEXT}$folder${RESET} aggiunto a $(path "$file")"
 	echo "   ${DIM}poi:${RESET} ${CMD}eng sync $name${RESET} ${DIM}lo clona; aggiungilo anche alla tabella del README del workspace${RESET}"

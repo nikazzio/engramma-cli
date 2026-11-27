@@ -10,7 +10,7 @@ import subprocess
 import tarfile
 
 ROOT = Path(__file__).resolve().parents[1]
-DIRECTORIES = {"bin", "lib", "completions", "docs", "tests", "scripts", "openspec", "examples", ".github"}
+DIRECTORIES = {"bin", "lib", "completions", "docs", "tests", "scripts", "examples", ".github"}
 FILES = {"README.md", "LICENSE", "VERSION", "CHANGELOG.md", "CONTRIBUTING.md", "SECURITY.md", "AGENTS.md", "Makefile", "tools.lock.json", ".shellcheckrc", ".editorconfig", ".gitattributes", ".gitignore"}
 
 

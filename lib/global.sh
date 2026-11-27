@@ -23,7 +23,7 @@ expand_global_destination() {
 }
 
 global_entries() {
-	read_list_file "$GLOBAL_LINKS_FILE"
+	read_list_entries "$GLOBAL_LINKS_FILE"
 }
 
 link_global() {
@@ -103,13 +103,18 @@ resolve_global_difference() {
 
 	case "$answer" in
 		c)
-			cp "$link" "$target"
+			if ! cp "$link" "$target" 2>/dev/null; then
+				problem "${FILE}$name${RESET}: copia in engramma non riuscita, file del computer lasciato com'è ${DIM}($(path "$link"))${RESET}"
+				return
+			fi
 			ok "${FILE}$name${RESET}: file del computer copiato in engramma"
 			;;
 		e)
-			local backup="$ENGRAMMA_DIR/backup/global/$BACKUP_STAMP/$name"
-			mkdir -p "$(dirname "$backup")"
-			cp -a "$link" "$backup"
+			local backup="$BACKUP_DIR/global/$BACKUP_STAMP/$name"
+			if ! { mkdir -p "$(dirname "$backup")" && cp -a "$link" "$backup"; } 2>/dev/null; then
+				problem "${FILE}$name${RESET}: backup non riuscito, file del computer lasciato com'è ${DIM}($(path "$link"))${RESET}"
+				return
+			fi
 			ok "${FILE}$name${RESET}: tenuto engramma, backup del locale in $(path "$backup")"
 			;;
 		*)
@@ -164,14 +169,15 @@ merge_global_file() {
 	done < <("$PYTHON" "$LIB_DIR/json_merge.py" "$target" "$destination" "$base" dry)
 
 	if ((${#conflicts[@]})) && [[ "$MODE" == run ]] && $IS_INTERACTIVE; then
-		local number=0 conflict answer
+		local conflict key answer
 		for conflict in "${conflicts[@]}"; do
-			number=$((number + 1))
-			warn "${FILE}$name${RESET} ${REF}${conflict%%$'\t'*}${RESET}: modificato su entrambi i lati ${DIM}${conflict#*$'\t'}${RESET}"
+			key="${conflict%%$'\t'*}"
+			warn "${FILE}$name${RESET} ${REF}$key${RESET}: modificato su entrambi i lati ${DIM}${conflict#*$'\t'}${RESET}"
 			ask "tengo [c] computer · [e] engramma · [s] salto?"
 			answer="$ASK_ANSWER"
-			[[ "$answer" == c ]] && choices+=(--choose "$number=computer")
-			[[ "$answer" == e ]] && choices+=(--choose "$number=engramma")
+			# By key, not by position: the file may change while the user answers.
+			[[ "$answer" == c ]] && choices+=(--choose "$key=computer")
+			[[ "$answer" == e ]] && choices+=(--choose "$key=engramma")
 		done
 	fi
 
@@ -247,7 +253,6 @@ check_global_commands() {
 		fi
 	done
 
-	check_mise_activation
 	check_zoxide_init
 	check_code_graph_servers
 }
@@ -395,7 +400,6 @@ interactive_rc_file() {
 
 # Login shells get mise from shell/zprofile, interactive ones need it in their rc file.
 check_mise_activation() {
-	is_global_requirement mise || return 0
 	local shell_name rc
 	shell_name="$(basename "${SHELL:-bash}")"
 	rc="$(interactive_rc_file)"
@@ -428,7 +432,7 @@ check_zoxide_init() {
 # code-review-graph answers Claude Code through an MCP server registered in the
 # configuration of this computer (not linked: it holds machine data).
 check_code_graph_servers() {
-	is_global_requirement code-review-graph && command -v code-review-graph >/dev/null || return 0
+	integration_enabled code-review-graph && command -v code-review-graph >/dev/null || return 0
 	if grep -qs '"code-review-graph"' "$HOME/.claude.json"; then
 		fine "MCP code-review-graph registrato in Claude Code"
 	else

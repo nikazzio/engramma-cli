@@ -1,0 +1,3 @@
+# Programmi che mise non gestisce: <comando> [facoltativo]  # come installarlo
+claude                 # https://code.claude.com/docs/en/setup
+codex   facoltativo    # https://github.com/openai/codex

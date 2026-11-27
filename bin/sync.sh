@@ -47,41 +47,55 @@ source "$LIB_DIR/codex.sh"
 source "$LIB_DIR/engramma.sh"
 # shellcheck source=../lib/commands.sh
 source "$LIB_DIR/commands.sh"
+# shellcheck source=../lib/tools.sh
+source "$LIB_DIR/tools.sh"
+# shellcheck source=../lib/integrations.sh
+source "$LIB_DIR/integrations.sh"
 
-ORIGINAL_ARGS=("$@")
+# Names a workspace cannot take: eng <name> would run the command instead.
+RESERVED_NAMES="check sync setup list tools integrations save new add log detach help session-start global all"
+
 
 usage() {
 	cat <<EOF
-engramma: contesto personale per gli agenti (note, memoria, configurazione)
-versionato in un repo privato e proiettato sui repo dei clienti, su ogni macchina.
+eng: tiene note, memoria e configurazione degli agenti in un archivio Git privato
+e le collega ai tuoi progetti, su ogni computer.
 
-Uso: eng [--data-dir <archivio>] [comando] [workspace...] [opzioni]
+Uso: eng [--data-dir <archivio>] [comando] [workspace | global] [opzioni]
 
 Comandi
-  (nessuno)            check in sola lettura di postazione e workspace presenti:
-                       drift dei symlink, merge pendenti, repo mancanti, lavoro non pushato
-  sync [workspace...]  pull dell'archivio, setup della postazione, poi per ogni workspace
-                       clone, collegamenti, aggiornamento repo e invio del contesto privato
-                       (senza nome: i workspace già presenti su questa macchina)
-  setup                solo postazione: programmi, file globali, plugin, Codex
-  list [workspace...]  i workspace di engramma con cartella e repo, senza toccare niente
-  save <ws> | global   commit e push dei soli file di quel workspace (o di global/ e skills/)
-  new <ws> [cartella]  crea un workspace vuoto; cartella sotto ~/workspace (default: il nome)
-  add <ws> <url> [br]  aggiunge un repo al workspace; eng sync lo clona
-  log                  il log dell'ultima esecuzione
-  detach <ws> | all    symlink → copie indipendenti; con all engramma diventa cancellabile
-  <workspace>          scorciatoia per sync <workspace>
+  check [ws | global]      controlla senza cambiare niente: collegamenti, repo mancanti,
+                           modifiche da salvare o da inviare. È il comando di default:
+                           eng da solo controlla il computer e i workspace presenti,
+                           eng <ws> solo quel workspace, eng global solo il computer
+  sync [ws | global]       scarica l'archivio, sistema il computer, clona e aggiorna i repo,
+                           poi salva e invia note e memoria dei workspace
+                           (senza nome: i workspace già presenti su questo computer;
+                           global: solo la configurazione del computer)
+  setup                    primo avvio su un computer nuovo: uguale a sync global
+  save <ws | global>       salva e invia subito le modifiche di un workspace o di global,
+                           con un commit dedicato, senza scaricare né toccare i repo
+  list [ws]                i workspace dell'archivio, con cartella e repo
+  tools [ws | global]      i programmi di mise e di requires.txt: installati e mancanti
+  tools install [ws|global]  mise installa i programmi mancanti, alla versione richiesta
+  integrations             le integrazioni degli agenti attive in global/integrations.txt
+                           (boost, caveman, code-review-graph, repomix) e cosa manca
+  new <ws> [cartella]      crea un workspace vuoto; cartella sotto ~/workspace (default: il nome)
+  add <ws> <url> [branch]  aggiunge un repo al workspace; eng sync lo clona
+  log                      mostra il log dell'ultima esecuzione
+  detach <ws|global|all>   sostituisce i collegamenti con copie indipendenti;
+                           dopo detach all l'archivio si può cancellare
 
 Opzioni
-  --data-dir <dir>     prima del comando: archivio per questa esecuzione
-  --version           versione del programma, senza accedere all'archivio
-  -n, --dry-run        mostra le operazioni senza eseguirle (sync, setup, detach)
-  -v, --verbose        mostra anche i controlli passati
-  --path <dir>         con sync di un solo workspace: dove stanno i suoi repo,
-                       salvato in ~/.config/engramma/paths
+  --data-dir <dir>     prima del comando: usa un altro archivio solo per questa volta
+  --version            versione del programma, senza leggere l'archivio
+  -n, --dry-run        mostra cosa farebbe senza farlo (sync, setup, detach)
+  -v, --verbose        mostra anche i controlli andati bene
+  --path <dir>         con sync di un solo workspace: dove stanno i suoi repo su questo
+                       computer (salvato in ~/.config/engramma/paths)
   -j, --jobs <n>       con sync: quanti repo clonare o aggiornare insieme
                        (default da ~/.config/engramma/config, altrimenti 3)
-  --prune              con sync: cancella senza chiedere i branch locali mergiati
+  --prune              con sync: cancella senza chiedere i branch locali già mergiati
                        o rimossi dal remoto, anche con commit solo locali
 
 Uscita: 0 se tutto è a posto, 1 se resta qualcosa da sistemare.
@@ -113,18 +127,29 @@ MODE=check
 REQUESTED_PATH=""
 REQUESTED_JOBS=""
 PRUNE=false
+TOOLS_INSTALL=false
+TOOLS_GLOBAL=false
 WORKSPACES=()
 BACKUP_STAMP="$(date +%Y-%m-%d-%H%M%S)"
+# Copies kept before replacing a file: on this computer, outside the archive and its Git.
+BACKUP_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/engramma/backup"
+
+# save, new and add take only names and values: an option would end up as data.
+if [[ "${1:-}" =~ ^(save|new|add)$ ]]; then
+	for arg in "${@:2}"; do
+		[[ "$arg" != -* ]] || fail_usage "eng $1 non accetta opzioni: $arg"
+	done
+fi
 
 case "${1:-}" in
 	sync | setup | check | detach | list | session-start)
 		COMMAND="$1"
 		shift
 		;;
-	# Called by the session hook of computers not yet updated.
-	--session-start)
-		COMMAND=session-start
+	tools)
+		COMMAND=tools
 		shift
+		[[ "${1:-}" == install ]] && TOOLS_INSTALL=true && shift
 		;;
 	-h | --help | help)
 		usage
@@ -134,6 +159,7 @@ save) echo "Archivio: $ENGRAMMA_DIR"; save_engramma "${@:2}"; exit ;;
 	new) echo "Archivio: $ENGRAMMA_DIR"; new_workspace "${@:2}"; exit ;;
 	add) echo "Archivio: $ENGRAMMA_DIR"; add_repo "${@:2}"; exit ;;
 	log) show_last_log; exit ;;
+	integrations) integrations_command; exit ;;
 esac
 
 while [[ $# -gt 0 ]]; do
@@ -152,23 +178,32 @@ while [[ $# -gt 0 ]]; do
 			;;
 		--prune) PRUNE=true ;;
 		-*) fail_usage "Opzione sconosciuta: $1" ;;
-		*)
-			# A workspace named first means sync, as in "eng ccroma".
-			if [[ "$COMMAND" == check && ${#ORIGINAL_ARGS[@]} -gt 0 && "${ORIGINAL_ARGS[0]}" == "$1" ]]; then
-				COMMAND=sync
-			fi
-			WORKSPACES+=("$1")
-			;;
+		# A name alone, as in "eng demo", is a check: only sync changes things.
+		*) WORKSPACES+=("$1") ;;
 	esac
 	shift
 done
 
 case "$COMMAND" in
 	sync | setup | detach) [[ "$MODE" == dry ]] || MODE=run ;;
-	check | list | session-start)
+	check | list | session-start | tools)
 		[[ "$MODE" == check ]] || fail_usage "--dry-run vale solo con sync, setup e detach"
 		;;
 esac
+
+# global is the configuration of the computer, named like a workspace.
+HEADER="$COMMAND"
+if [[ " ${WORKSPACES[*]} " == *" global "* ]]; then
+	((${#WORKSPACES[@]} == 1)) || fail_usage "global va da solo: eng $COMMAND global"
+	HEADER="$COMMAND global"
+	case "$COMMAND" in
+		sync | check) COMMAND=setup ;;
+		detach) COMMAND=detach-global ;;
+		tools) TOOLS_GLOBAL=true ;;
+		*) fail_usage "eng $COMMAND non accetta global" ;;
+	esac
+	WORKSPACES=()
+fi
 
 if [[ "$COMMAND" == detach && ${#WORKSPACES[@]} -eq 1 && "${WORKSPACES[0]}" == all ]]; then
 	COMMAND=detach-all
@@ -180,8 +215,8 @@ for name in "${WORKSPACES[@]}"; do
 done
 
 case "$COMMAND" in
-	setup | session-start | detach-all)
-		((${#WORKSPACES[@]} == 0)) || fail_usage "eng $COMMAND non accetta workspace"
+	setup | session-start | detach-all | detach-global)
+		((${#WORKSPACES[@]} == 0)) || fail_usage "eng $HEADER non accetta workspace"
 		;;
 	detach)
 		((${#WORKSPACES[@]} == 1)) || fail_usage "eng detach vuole un workspace, oppure all"
@@ -261,7 +296,8 @@ setup_workstation() {
 	report_engramma
 	use_mise_tools
 	load_ssh_agent
-	block "programmi" "global/requires.txt" "programmi"
+	block "programmi" "mise · global/requires.txt" "programmi"
+	ensure_mise
 	check_global_commands
 	block "configurazione" "global/ · skills/" "file"
 	link_skills
@@ -318,6 +354,11 @@ if [[ "$COMMAND" == list ]]; then
 	exit 0
 fi
 
+if [[ "$COMMAND" == tools ]]; then
+	tools_command "$TOOLS_INSTALL" "$TOOLS_GLOBAL" "${WORKSPACES[@]}"
+	exit $?
+fi
+
 [[ "$COMMAND" == session-start ]] || start_log
 
 case "$COMMAND" in
@@ -339,6 +380,13 @@ case "$COMMAND" in
 		done
 		finish
 		;;
+	detach-global)
+		print_header "detach global"
+		block "global" "skill e configurazione"
+		detach_skills
+		detach_global
+		finish
+		;;
 	detach)
 		load_workspace "${WORKSPACES[0]}"
 		print_header "detach $WORKSPACE_NAME"
@@ -350,7 +398,7 @@ esac
 
 [[ "$MODE" == run ]] && { load_ssh_agent; pull_engramma; }
 
-print_header "$COMMAND"
+print_header "$HEADER"
 
 ALL_WORKSPACES=false
 if [[ "$COMMAND" != setup ]] && ((${#WORKSPACES[@]} == 0)); then
@@ -368,7 +416,10 @@ for name in "${WORKSPACES[@]}"; do
 done
 [[ "$COMMAND" == sync ]] && start_repo_jobs "${WORKSPACES[@]}"
 
-setup_workstation
+# A check of named workspaces looks at them only; "eng check global" covers the computer.
+if [[ "$COMMAND" != check ]] || $ALL_WORKSPACES; then
+	setup_workstation
+fi
 [[ "$COMMAND" == setup ]] && finish
 
 $ALL_WORKSPACES || EXPAND_BLOCKS=true

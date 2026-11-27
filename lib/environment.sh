@@ -86,7 +86,7 @@ prefetch_ssh() {
 		[[ -n "$host" && ! -e "$SSH_PROBE_DIR/$host.pid" ]] || continue
 		(
 			timeout "$SSH_CHECK_TIMEOUT_SECONDS" ssh -T -o BatchMode=yes -o ConnectTimeout=10 "$host" >"$SSH_PROBE_DIR/$host.out" 2>&1 </dev/null
-			touch "$SSH_PROBE_DIR/$host.done"
+			echo $? >"$SSH_PROBE_DIR/$host.done"
 		) &
 		echo $! >"$SSH_PROBE_DIR/$host.pid"
 	done
@@ -101,8 +101,14 @@ ssh_probe() {
 	cat "$SSH_PROBE_DIR/$host.out"
 }
 
-is_ssh_welcome() {
-	[[ "$1" == *Welcome* || "$1" == *"successfully authenticated"* ]]
+# ssh exits with 255 when it cannot connect or authenticate, timeout with 124.
+# Any other code means the server accepted the key: GitHub exits with 1, other
+# servers with 0 or with the code of their git shell, each with its own message.
+ssh_probe_accepted() {
+	local host="$1" code
+	ssh_probe "$host" >/dev/null
+	code="$(cat "$SSH_PROBE_DIR/$host.done" 2>/dev/null)"
+	[[ -n "$code" && "$code" != 255 && "$code" != 124 ]]
 }
 
 check_ssh() {
@@ -111,7 +117,7 @@ check_ssh() {
 		[[ -n "$host" ]] || continue
 		activity "$BLOCK_TITLE › ssh -T ${host#*@}"
 		output="$(ssh_probe "$host")"
-		if is_ssh_welcome "$output"; then
+		if ssh_probe_accepted "$host"; then
 			fine "ssh ${host#*@} autenticato"
 		else
 			problem "ssh ${REF}${host#*@}${RESET} non autenticato ${DIM}($(tail -n 1 <<<"${output:-nessuna risposta}"))${RESET}: clone e fetch dei suoi repo saltati"
@@ -129,7 +135,7 @@ ssh_host_of_url() {
 ssh_url_authenticated() {
 	local host
 	host="$(ssh_host_of_url "$1")"
-	[[ -z "$host" ]] || is_ssh_welcome "$(ssh_probe "$host")"
+	[[ -z "$host" ]] || ssh_probe_accepted "$host"
 }
 
 ssh_agent_has_keys() {
@@ -164,7 +170,7 @@ check_hosts() {
 		else
 			problem "$hostname non è nel file hosts ${DIM}($hosts_file)${RESET}: aggiungi ${REF}127.0.0.1 $hostname${RESET} da amministratore"
 		fi
-	done < <(read_list_file "$WORKSPACE_NOTES_DIR/hosts.txt")
+	done < <(read_list_entries "$WORKSPACE_NOTES_DIR/hosts.txt")
 }
 
 check_environment() {

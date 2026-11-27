@@ -81,12 +81,18 @@ is_replaceable_codex_instructions() {
 }
 
 codex_instructions() {
-	echo "$CODEX_INSTRUCTIONS_MARKER da $(tilde "$1") e $(tilde "$CODEX_HOME_DIR")/BOOST.md: non modificare qui, viene riscritto da eng sync. -->"
+	local boost=false
+	integration_enabled boost && [[ -f "$CODEX_HOME_DIR/BOOST.md" ]] && boost=true
+	if $boost; then
+		echo "$CODEX_INSTRUCTIONS_MARKER da $(tilde "$1") e $(tilde "$CODEX_HOME_DIR")/BOOST.md: non modificare qui, viene riscritto da eng sync. -->"
+	else
+		echo "$CODEX_INSTRUCTIONS_MARKER da $(tilde "$1"): non modificare qui, viene riscritto da eng sync. -->"
+	fi
 	echo
 	cat "$1"
 	echo
 	codex_repo_rule
-	if [[ -f "$CODEX_HOME_DIR/BOOST.md" ]]; then
+	if $boost; then
 		echo
 		echo
 		boost_without_manual_pipe "$CODEX_HOME_DIR/BOOST.md"
@@ -186,7 +192,7 @@ check_codex_fallback_filenames() {
 # code-review-graph answers Claude Code and Codex through an MCP server, which
 # each agent registers in its own configuration.
 check_codex_code_graph() {
-	is_global_requirement code-review-graph && command -v code-review-graph >/dev/null || return 0
+	integration_enabled code-review-graph && command -v code-review-graph >/dev/null || return 0
 	if grep -qs '^\[mcp_servers\.code-review-graph\]' "$CODEX_CONFIG"; then
 		fine "MCP code-review-graph registrato in Codex"
 	else

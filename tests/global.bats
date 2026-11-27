@@ -33,6 +33,32 @@ teardown() {
 	[ "$status" -eq 0 ]
 }
 
+@test "global is a target like a workspace: check, sync and detach" {
+	run "$SYNC" check global
+	[ "$status" -eq 1 ]
+	[[ "$output" != *"Workspace sconosciuto"* ]]
+	[[ "$output" == *"file globali"* ]]
+	[ ! -e "$ENGRAMMA_CLAUDE_HOME/settings.json" ]
+
+	run "$SYNC" sync global
+	[ "$status" -eq 0 ]
+	[ "$(readlink "$ENGRAMMA_CLAUDE_HOME/settings.json")" = "$GLOBAL/claude/settings.json" ]
+	[ ! -e "$WORKSPACE" ]
+
+	run "$SYNC" global
+	[ "$status" -eq 0 ]
+	run "$SYNC" check global
+	[ "$status" -eq 0 ]
+
+	run "$SYNC" sync global demo
+	[ "$status" -eq 1 ]
+
+	run "$SYNC" detach global
+	[ "$status" -eq 0 ]
+	[ ! -L "$ENGRAMMA_CLAUDE_HOME/settings.json" ]
+	[ "$(cat "$ENGRAMMA_CLAUDE_HOME/settings.json")" = '{"theme": "dark"}' ]
+}
+
 @test "links the global configuration with every workspace sync" {
 	run "$SYNC" sync demo
 	[ "$status" -eq 0 ]
@@ -86,6 +112,30 @@ teardown() {
 
 	run "$SYNC" check
 	[ "$status" -eq 1 ]
+}
+
+@test "keeps the local file when copying it into engramma fails" {
+	mkdir -p "$ENGRAMMA_CLAUDE_HOME"
+	echo '{"theme": "light"}' >"$ENGRAMMA_CLAUDE_HOME/settings.json"
+	chmod 444 "$GLOBAL/claude/settings.json"
+
+	run_in_terminal 120 'c\n' "$SYNC" setup
+	chmod 644 "$GLOBAL/claude/settings.json"
+	[ ! -L "$ENGRAMMA_CLAUDE_HOME/settings.json" ]
+	[ "$(cat "$ENGRAMMA_CLAUDE_HOME/settings.json")" = '{"theme": "light"}' ]
+	[[ "$output" == *"copia in engramma non riuscita"* ]]
+}
+
+@test "keeps the local file when its backup fails" {
+	mkdir -p "$ENGRAMMA_CLAUDE_HOME"
+	echo '{"theme": "light"}' >"$ENGRAMMA_CLAUDE_HOME/settings.json"
+	mkdir -p "$XDG_STATE_HOME/engramma"
+	echo "non una cartella" >"$XDG_STATE_HOME/engramma/backup"
+
+	run_in_terminal 120 'e\n' "$SYNC" setup
+	[ ! -L "$ENGRAMMA_CLAUDE_HOME/settings.json" ]
+	[ "$(cat "$ENGRAMMA_CLAUDE_HOME/settings.json")" = '{"theme": "light"}' ]
+	[[ "$output" == *"backup non riuscito"* ]]
 }
 
 @test "leaves a global link pointing elsewhere untouched" {
@@ -235,8 +285,7 @@ EOF2
 }
 
 @test "reports a shell that does not activate mise" {
-	fake_command "$TEST_ROOT/bin/mise"
-	echo 'mise' >"$GLOBAL/requires.txt"
+	rm "$HOME/.zshrc"
 	"$SYNC" setup >/dev/null || true
 
 	SHELL=/bin/zsh PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check
@@ -270,7 +319,7 @@ EOF2
 	[[ "$output" == *"zoxide non attivato in ~/.zshrc"* ]]
 	[[ "$output" == *"echo 'eval \"\$(zoxide init zsh)\"' >> ~/.zshrc"* ]]
 
-	echo 'eval "$(zoxide init zsh)"' >"$HOME/.zshrc"
+	echo 'eval "$(zoxide init zsh)"' >>"$HOME/.zshrc"
 	SHELL=/bin/zsh PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check
 	[ "$status" -eq 0 ]
 }
@@ -311,22 +360,22 @@ EOF2
 added="$TEST_ROOT/added"
 case "$*" in
 	"plugin list --json") echo '[]' ;;
-	"plugin marketplace list --json") [ -f "$added" ] && echo '[{"name": "atlas"}]' || echo '[]' ;;
-	"plugin marketplace add git@example.com:atlas/plugins.git")
+	"plugin marketplace list --json") [ -f "$added" ] && echo '[{"name": "team"}]' || echo '[]' ;;
+	"plugin marketplace add git@example.com:team/plugins.git")
 		touch "$added"
-		printf '{"enabledPlugins": {"bedita@atlas": true}, "extraKnownMarketplaces": {"atlas": {"source": {"source": "git", "url": "git@example.com:atlas/plugins.git"}}}}\n' >"$HOME/.claude/settings.json" ;;
-	"plugin install bedita@atlas") [ -f "$added" ] || { echo 'Plugin "bedita" not found in marketplace "atlas"'; exit 1; } ;;
+		printf '{"enabledPlugins": {"plugin@team": true}, "extraKnownMarketplaces": {"team": {"source": {"source": "git", "url": "git@example.com:team/plugins.git"}}}}\n' >"$HOME/.claude/settings.json" ;;
+	"plugin install plugin@team") [ -f "$added" ] || { echo 'Plugin "plugin" not found in marketplace "team"'; exit 1; } ;;
 esac
 exit 0
 EOF2
 	chmod +x "$TEST_ROOT/bin/claude"
 	echo 'claude' >"$GLOBAL/requires.txt"
-	printf '{"enabledPlugins": {"bedita@atlas": true}, "extraKnownMarketplaces": {"atlas": {"source": {"source": "git", "url": "git@example.com:atlas/plugins.git"}, "autoUpdate": true}}}\n' >"$GLOBAL/claude/settings.json"
+	printf '{"enabledPlugins": {"plugin@team": true}, "extraKnownMarketplaces": {"team": {"source": {"source": "git", "url": "git@example.com:team/plugins.git"}, "autoUpdate": true}}}\n' >"$GLOBAL/claude/settings.json"
 
 	TEST_ROOT="$TEST_ROOT" PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" setup
-	[[ "$output" == *"marketplace atlas registrato in Claude Code"* ]]
-	[[ "$output" == *"bedita@atlas installato"* ]]
-	"$PYTHON" -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1]))["extraKnownMarketplaces"]["atlas"].get("autoUpdate") is True else 1)' "$HOME/.claude/settings.json"
+	[[ "$output" == *"marketplace team registrato in Claude Code"* ]]
+	[[ "$output" == *"plugin@team installato"* ]]
+	"$PYTHON" -c 'import json, sys; sys.exit(0 if json.load(open(sys.argv[1]))["extraKnownMarketplaces"]["team"].get("autoUpdate") is True else 1)' "$HOME/.claude/settings.json"
 }
 
 @test "reports a declared marketplace not registered, and one without automatic update" {
@@ -341,12 +390,12 @@ exit 0
 EOF2
 	chmod +x "$TEST_ROOT/bin/claude"
 	echo 'claude' >"$GLOBAL/requires.txt"
-	printf '{"extraKnownMarketplaces": {"atlas": {"source": {"source": "git", "url": "git@example.com:a/b.git"}, "autoUpdate": true}, "manuale": {"source": {"source": "git", "url": "git@example.com:c/d.git"}}}}\n' >"$GLOBAL/claude/settings.json"
+	printf '{"extraKnownMarketplaces": {"team": {"source": {"source": "git", "url": "git@example.com:a/b.git"}, "autoUpdate": true}, "manuale": {"source": {"source": "git", "url": "git@example.com:c/d.git"}}}}\n' >"$GLOBAL/claude/settings.json"
 	mkdir -p "$ENGRAMMA_CLAUDE_HOME"
 	ln -s "$GLOBAL/claude/settings.json" "$ENGRAMMA_CLAUDE_HOME/settings.json"
 
 	PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check
-	[[ "$output" == *"marketplace atlas dichiarato in settings.json ma non registrato in Claude Code"* ]]
+	[[ "$output" == *"marketplace team dichiarato in settings.json ma non registrato in Claude Code"* ]]
 	[[ "$output" == *"marketplace manuale: aggiornamento automatico spento"* ]]
 }
 
@@ -365,7 +414,8 @@ EOF2
 @test "writes the Codex instructions from the global rules and boost" {
 	fake_command "$TEST_ROOT/bin/codex"
 	echo 'codex' >"$GLOBAL/requires.txt"
-	echo '# Regole di Niki' >"$GLOBAL/claude/CLAUDE.md"
+	echo 'boost' >"$GLOBAL/integrations.txt"
+	echo '# Regole generali' >"$GLOBAL/claude/CLAUDE.md"
 	echo 'claude/CLAUDE.md ${CLAUDE_HOME}/CLAUDE.md' >>"$GLOBAL/links.txt"
 	mkdir -p "$HOME/.codex"
 	printf 'project_doc_fallback_filenames = ["CLAUDE.md"]\n[features]\nshell_snapshot = false\n' >"$HOME/.codex/config.toml"
@@ -379,7 +429,7 @@ EOF2
 
 	PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" setup
 	[ "$status" -eq 0 ]
-	grep -q '^# Regole di Niki' "$HOME/.codex/AGENTS.md"
+	grep -q '^# Regole generali' "$HOME/.codex/AGENTS.md"
 	grep -q '^boost report' "$HOME/.codex/AGENTS.md"
 	grep -q 'do not add `| boost`' "$HOME/.codex/AGENTS.md"
 	! grep -q 'Always pipe' "$HOME/.codex/AGENTS.md"
@@ -389,6 +439,21 @@ EOF2
 	grep -q '^# Regole aggiornate' "$HOME/.codex/AGENTS.md"
 	PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check
 	[ "$status" -eq 0 ]
+}
+
+@test "leaves boost out of the Codex instructions when it is not an active integration" {
+	fake_command "$TEST_ROOT/bin/codex"
+	echo 'codex' >"$GLOBAL/requires.txt"
+	echo '# Regole generali' >"$GLOBAL/claude/CLAUDE.md"
+	echo 'claude/CLAUDE.md ${CLAUDE_HOME}/CLAUDE.md' >>"$GLOBAL/links.txt"
+	mkdir -p "$HOME/.codex"
+	printf 'project_doc_fallback_filenames = ["CLAUDE.md"]\n[features]\nshell_snapshot = false\n' >"$HOME/.codex/config.toml"
+	printf '# Boost\n\nboost report\n' >"$HOME/.codex/BOOST.md"
+
+	PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" setup
+	[ "$status" -eq 0 ]
+	grep -q '^# Regole generali' "$HOME/.codex/AGENTS.md"
+	! grep -q 'boost' "$HOME/.codex/AGENTS.md"
 }
 
 @test "never replaces Codex instructions written by hand" {
@@ -410,6 +475,7 @@ EOF2
 	fake_command "$TEST_ROOT/bin/code-review-graph"
 	fake_command "$TEST_ROOT/bin/codex"
 	printf 'code-review-graph\ncodex\n' >"$GLOBAL/requires.txt"
+	echo 'code-review-graph' >"$GLOBAL/integrations.txt"
 	mkdir -p "$HOME/.codex"
 	printf 'project_doc_fallback_filenames = ["CLAUDE.md"]\n[features]\nshell_snapshot = false\n' >"$HOME/.codex/config.toml"
 	"$SYNC" setup >/dev/null || true

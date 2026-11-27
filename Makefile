@@ -11,7 +11,6 @@ lint:
 
 check-tools:
 	.tools/bin/actionlint
-	OPENSPEC_TELEMETRY=0 .tools/bin/openspec validate --all --strict --no-interactive
 	.tools/bin/gitleaks dir . --redact --no-banner
 
 check: lint test check-tools

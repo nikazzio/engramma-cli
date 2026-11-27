@@ -1,0 +1,4 @@
+# <file in global/>      <destinazione>                        [unisci]
+claude/CLAUDE.md          ${CLAUDE_HOME}/CLAUDE.md
+claude/settings.json      ${CLAUDE_HOME}/settings.json          unisci
+mise/config.toml          ${XDG_CONFIG_HOME}/mise/config.toml

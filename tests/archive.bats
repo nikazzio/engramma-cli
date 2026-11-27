@@ -132,6 +132,8 @@ teardown() {
 
 @test "native memory travels between two isolated Claude configurations" {
 	local first_memory second_memory other_home="$TEST_ROOT/second home"
+	mkdir -p "$other_home"
+	cp "$HOME/.bashrc" "$HOME/.zshrc" "$other_home/"
 	local program_before
 	program_before="$(sha256sum "$SYNC")"
 	local remote="$TEST_ROOT/remotes/archive.git"

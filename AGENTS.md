@@ -1,7 +1,7 @@
 # Engramma development
 
 - Runtime: Bash 5 and Python standard library on Linux/WSL. Program code and private archives have separate roots.
-- Read `README.md`, `CONTRIBUTING.md` and relevant `openspec/specs/` before changing behavior.
+- Read `README.md`, `CONTRIBUTING.md` and the relevant pages of `docs/` before changing behavior.
 - Keep native Claude memory as the first supported memory workflow. Codex configuration exists; broader agent memory support needs its own proposal and tests.
 - Use fake archives and isolated HOME, XDG and Claude directories for tests. Never run setup, sync or migration against the maintainer's live archives to verify a change.
 - Preserve originals on copy, backup, link and Git failures. Never resolve divergent data by overwriting it.

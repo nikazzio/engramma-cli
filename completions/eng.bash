@@ -27,10 +27,12 @@ _eng() {
 	if [[ "$current" == -* ]]; then
 		words="--data-dir -n --dry-run -v --verbose --path -j --jobs --prune -h --help"
 	elif ((COMP_CWORD == offset)); then
-		words="sync setup detach list save new add log help $workspaces"
+		words="check sync setup detach list tools integrations save new add log help global $workspaces"
 	elif [[ "${COMP_WORDS[offset]}" == detach ]]; then
-		words="all $workspaces"
-	elif [[ "${COMP_WORDS[offset]}" == save ]]; then
+		words="all global $workspaces"
+	elif [[ "${COMP_WORDS[offset]}" == tools ]]; then
+		words="install global $workspaces"
+	elif [[ "${COMP_WORDS[offset]}" =~ ^(save|sync|check)$ ]]; then
 		words="global $workspaces"
 	elif [[ "${COMP_WORDS[offset]}" =~ ^(new|log)$ ]] || { [[ "${COMP_WORDS[offset]}" == add ]] && ((COMP_CWORD > offset + 1)); }; then
 		return 0
