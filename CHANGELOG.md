@@ -17,3 +17,5 @@
 - `eng integrations` allinea i simboli alle colonne e verifica lo stato dei plugin di Claude installato.
 - Il completamento Bash e zsh segue gli argomenti del comando. `--version` funziona anche dopo le altre opzioni.
 - Lo scollegamento segnala copie e sostituzioni fallite. La guida descrive come verificare lo scambio della memoria fra due installazioni.
+- `eng` parte anche senza archivio: mostra la schermata, segnala il problema e controlla i comandi `eng`, mise e git. `eng setup` crea i comandi anche in quel caso.
+- `eng init` crea un archivio nuovo da un esempio. `eng setup <indirizzo o cartella>` collega o clona un archivio esistente. Entrambi ricordano il percorso e non sovrascrivono niente.

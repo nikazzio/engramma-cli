@@ -13,16 +13,34 @@ for argument in "$@"; do
 		exit 0
 	fi
 done
+# Without a usable archive the program still starts: HAS_ARCHIVE=false shows the
+# problem and runs only what needs no archive (see run_without_archive).
+HAS_ARCHIVE=true
+ARCHIVE_PATH=""
 case "${1:-}" in
 	-h | --help | help) ENGRAMMA_DIR="" ;;
 	*)
-		select_archive "$@" || exit 1
-		if [[ "${1:-}" == --data-dir ]]; then shift 2; fi
-		case "${1:-}" in
-			-h | --help | help) ;;
-			*) validate_archive || exit 1 ;;
+		select_archive "$@"
+		case $? in
+			0) ;;
+			2) HAS_ARCHIVE=false ;;
+			*) exit 1 ;;
 		esac
+		if $HAS_ARCHIVE; then
+			if [[ "${1:-}" == --data-dir ]]; then shift 2; fi
+			case "${1:-}" in
+				-h | --help | help) ;;
+				*)
+					if ! validate_archive; then
+						HAS_ARCHIVE=false
+						ARCHIVE_PATH="$ENGRAMMA_DIR"
+						ENGRAMMA_DIR=""
+					fi
+					;;
+			esac
+		fi
 		if [[ "${1:-}" == --print-data-dir ]]; then
+			$HAS_ARCHIVE || { echo "$ARCHIVE_ERROR" >&2; exit 1; }
 			printf '%s\n' "$ENGRAMMA_DIR"
 			exit 0
 		fi
@@ -49,13 +67,15 @@ source "$LIB_DIR/codex.sh"
 source "$LIB_DIR/engramma.sh"
 # shellcheck source=../lib/commands.sh
 source "$LIB_DIR/commands.sh"
+# shellcheck source=../lib/standalone.sh
+source "$LIB_DIR/standalone.sh"
 # shellcheck source=../lib/tools.sh
 source "$LIB_DIR/tools.sh"
 # shellcheck source=../lib/integrations.sh
 source "$LIB_DIR/integrations.sh"
 
 # Names a workspace cannot take: eng <name> would run the command instead.
-RESERVED_NAMES="check sync setup list tools integrations save new add log detach help session-start global all"
+RESERVED_NAMES="check sync setup init list tools integrations save new add log detach help session-start global all"
 
 
 usage() {
@@ -74,7 +94,11 @@ Comandi
                            poi salva e invia note e memoria dei workspace
                            (senza nome: i workspace già presenti su questo computer;
                            global: solo la configurazione del computer)
-  setup                    primo avvio su un computer nuovo: uguale a sync global
+  init [cartella]          crea un archivio nuovo (default ~/engramma-dati): Git, primo
+                           commit e percorso ricordato. Poi collega un repository privato
+  setup [archivio]         primo avvio su un computer nuovo: uguale a sync global. Con
+                           l'indirizzo Git o la cartella di un archivio esistente lo
+                           collega (un indirizzo viene clonato in ~/engramma-dati)
   save <ws | global>       salva e invia subito le modifiche di un workspace o di global,
                            con un commit dedicato, senza scaricare né toccare i repo
   list [ws]                i workspace dell'archivio, con cartella e repo
@@ -91,7 +115,7 @@ Comandi
 Opzioni
   --data-dir <dir>     prima del comando: usa un altro archivio solo per questa volta
   --version            versione del programma, senza leggere l'archivio
-  -n, --dry-run        mostra cosa farebbe senza farlo (sync, setup, detach)
+  -n, --dry-run        mostra cosa farebbe senza farlo (init, sync, setup, detach)
   -v, --verbose        mostra anche i controlli andati bene
   --path <dir>         con sync di un solo workspace: dove stanno i suoi repo su questo
                        computer (salvato in ~/.config/engramma/paths)
@@ -135,6 +159,18 @@ WORKSPACES=()
 BACKUP_STAMP="$(date +%Y-%m-%d-%H%M%S)"
 # Copies kept before replacing a file: on this computer, outside the archive and its Git.
 BACKUP_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/engramma/backup"
+
+# init and setup <archive> work with or without an archive already selected.
+case "${1:-}" in
+	init) init_archive "${@:2}"; exit $? ;;
+	setup)
+		for argument in "${@:2}"; do
+			[[ "$argument" == -* ]] || { attach_archive "${@:2}"; exit $?; }
+		done
+		;;
+esac
+
+[[ "${1:-}" == log ]] || $HAS_ARCHIVE || run_without_archive "$@"
 
 # save, new and add take only names and values: an option would end up as data.
 if [[ "${1:-}" =~ ^(save|new|add)$ ]]; then

@@ -2,6 +2,9 @@
 
 # Select data without evaluating configuration as shell code. This module is
 # also used before the workstation modules, which depend on the selected root.
+# shellcheck disable=SC2034 # read by bin/sync.sh and lib/standalone.sh
+ARCHIVE_ERROR=""
+
 select_archive() {
 	local selected="${ENGRAMMA_DATA_DIR:-}" saved
 	ARCHIVE_LEGACY=false
@@ -23,8 +26,11 @@ select_archive() {
 		ARCHIVE_LEGACY=true
 	fi
 	if [[ -z "$selected" ]]; then
-		echo "Archivio non configurato: usa eng --data-dir <cartella> oppure salva il percorso in ~/.config/engramma/archive" >&2
-		return 1
+		# Not an error of the command line: the caller shows it and still runs the
+		# steps that need no archive.
+		ARCHIVE_ERROR="Archivio non configurato: eng init ne crea uno nuovo, eng setup <indirizzo o cartella> ne collega uno esistente"
+		ENGRAMMA_DIR=""
+		return 2
 	fi
 	ENGRAMMA_DIR="$(realpath -m -- "$selected")" || return 1
 }
@@ -32,14 +38,14 @@ select_archive() {
 validate_archive() {
 	local root
 	if [[ ! -d "$ENGRAMMA_DIR/workspaces" ]]; then
-		echo "Archivio non valido: $ENGRAMMA_DIR (manca workspaces/)" >&2
+		ARCHIVE_ERROR="Archivio non valido: $ENGRAMMA_DIR (manca workspaces/)"
 		return 1
 	fi
 	# Preserve the legacy directory-only usage; the separated archive is Git.
 	$ARCHIVE_LEGACY && return 0
 	root="$(git -C "$ENGRAMMA_DIR" rev-parse --show-toplevel 2>/dev/null)" || root=""
 	if [[ -z "$root" || "$(realpath -- "$root")" != "$(realpath -- "$ENGRAMMA_DIR")" ]]; then
-		echo "Archivio non valido: $ENGRAMMA_DIR (serve la radice di un repository Git)" >&2
+		ARCHIVE_ERROR="Archivio non valido: $ENGRAMMA_DIR (serve la radice di un repository Git)"
 		return 1
 	fi
 }

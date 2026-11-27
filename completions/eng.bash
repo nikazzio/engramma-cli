@@ -34,11 +34,12 @@ _eng() {
 			case "${COMP_WORDS[offset]}" in
 				sync) words+=" -v --verbose -n --dry-run --path -j --jobs --prune" ;;
 				setup | detach) words+=" -v --verbose -n --dry-run" ;;
+				init) words+=" -n --dry-run" ;;
 				check) words+=" -v --verbose" ;;
 			esac
 		fi
 	elif ((COMP_CWORD == offset)); then
-		words="check sync setup detach list tools integrations save new add log help global $workspaces"
+		words="check sync setup init detach list tools integrations save new add log help global $workspaces"
 	elif [[ "${COMP_WORDS[offset]}" == detach ]]; then
 		words="all global $workspaces"
 	elif [[ "${COMP_WORDS[offset]}" == tools ]]; then
@@ -46,7 +47,10 @@ _eng() {
 		((COMP_CWORD == offset + 1)) && words="install $words"
 	elif [[ "${COMP_WORDS[offset]}" =~ ^(save|sync|check)$ ]]; then
 		words="global $workspaces"
-	elif [[ "${COMP_WORDS[offset]}" =~ ^(new|log|setup|integrations|help)$ ]] || { [[ "${COMP_WORDS[offset]}" == add ]] && ((COMP_CWORD > offset + 1)); }; then
+	elif [[ "${COMP_WORDS[offset]}" =~ ^(init|setup)$ ]]; then
+		mapfile -t COMPREPLY < <(compgen -d -- "$current")
+		return 0
+	elif [[ "${COMP_WORDS[offset]}" =~ ^(new|log|integrations|help)$ ]] || { [[ "${COMP_WORDS[offset]}" == add ]] && ((COMP_CWORD > offset + 1)); }; then
 		return 0
 	else
 		words="$workspaces"

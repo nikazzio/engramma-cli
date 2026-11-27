@@ -920,11 +920,16 @@ print_header() {
 	print_logo
 	put ""
 	put " $(brand ◆)  ${TITLE}$1${RESET}${mode_label:+  ${RULE}·${RESET} $mode_label}  ${RULE}·${RESET} ${DIM}$(hostname -s 2>/dev/null) · ${REF}$(engramma_revision)${RESET}"
-	put "    ${DIM}archivio: $(tilde "$ENGRAMMA_DIR")${RESET}"
+	if [[ -n "$ENGRAMMA_DIR" ]]; then
+		put "    ${DIM}archivio: $(tilde "$ENGRAMMA_DIR")${RESET}"
+	else
+		put "    ${DIM}archivio: ${RESET}${RED}non disponibile${RESET}"
+	fi
 	$VERBOSE || put "    ${DIM}una riga per sezione, riepilogo in fondo; eng <workspace> o -v per i dettagli${RESET}"
 	start_activity
 }
 
 engramma_revision() {
+	[[ -n "$ENGRAMMA_DIR" ]] || { echo "senza archivio"; return; }
 	git -C "$ENGRAMMA_DIR" log -1 --format='%h · %cs' 2>/dev/null || echo "senza git"
 }

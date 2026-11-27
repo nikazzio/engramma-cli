@@ -6,6 +6,7 @@ Ogni voce: il messaggio di `eng`, la causa, cosa fare. Il riepilogo finale di `e
 
 | Messaggio | Causa | Cosa fare |
 |---|---|---|
+| `Archivio non configurato: …` | nessun archivio scelto | `eng init` ne crea uno, `eng setup <indirizzo o cartella>` ne collega uno esistente |
 | `Archivio non valido: … (manca workspaces/)` | la cartella scelta non è un archivio | controlla `~/.config/engramma/archive` o `--data-dir` |
 | `Archivio non valido: … (serve la radice di un repository Git)` | la cartella è dentro un repo, non la sua radice | indica la radice del repo dell'archivio |
 | `Archivio solo locale: configura il branch remoto…` | l'archivio non ha un branch remoto | `git -C <archivio> push -u origin main` |

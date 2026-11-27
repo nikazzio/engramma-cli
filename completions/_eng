@@ -19,6 +19,7 @@ if (( CURRENT == offset )); then
 	(( offset == 2 )) && option_list+=('--data-dir:archivio per questa esecuzione')
 else
 	case $words[offset] in
+		init) option_list+=('-n:mostra senza eseguire' '--dry-run:mostra senza eseguire') ;;
 		sync|setup|detach) option_list+=('-n:mostra senza eseguire' '--dry-run:mostra senza eseguire') ;&
 		check) option_list+=('-v:mostra anche i controlli passati' '--verbose:mostra anche i controlli passati') ;;
 	esac
@@ -35,7 +36,7 @@ esac
 if [[ $PREFIX == -* ]]; then
 	_describe 'opzione' option_list
 elif (( CURRENT == offset )); then
-	local -a command_list=('check:controlla senza cambiare niente' 'sync:scarica, sistema e aggiorna i repo' 'setup:primo avvio del computer' 'list:workspace e repo' 'tools:programmi installati e mancanti' 'integrations:integrazioni degli agenti' 'save:salva e invia un workspace' 'new:nuovo workspace' 'add:aggiunge un repo' 'log:ultimo log' 'detach:collegamenti in copie' 'help:aiuto' 'global:configurazione del computer')
+	local -a command_list=('check:controlla senza cambiare niente' 'sync:scarica, sistema e aggiorna i repo' 'setup:primo avvio del computer, o collega un archivio' 'init:crea un archivio nuovo' 'list:workspace e repo' 'tools:programmi installati e mancanti' 'integrations:integrazioni degli agenti' 'save:salva e invia un workspace' 'new:nuovo workspace' 'add:aggiunge un repo' 'log:ultimo log' 'detach:collegamenti in copie' 'help:aiuto' 'global:configurazione del computer')
 	_describe 'comando' command_list
 	_describe 'workspace' workspaces
 elif [[ $words[offset] == detach ]]; then
@@ -46,7 +47,9 @@ elif [[ $words[offset] == tools ]]; then
 	compadd $targets
 elif [[ $words[offset] == (save|sync|check) ]]; then
 	compadd global $workspaces
-elif [[ $words[offset] == (new|log|setup|integrations|help) ]] || { [[ $words[offset] == add ]] && (( CURRENT > offset + 1 )); }; then
+elif [[ $words[offset] == (init|setup) ]]; then
+	_files -/
+elif [[ $words[offset] == (new|log|integrations|help) ]] || { [[ $words[offset] == add ]] && (( CURRENT > offset + 1 )); }; then
 	return 0
 else
 	compadd $workspaces

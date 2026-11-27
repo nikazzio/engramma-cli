@@ -4,7 +4,7 @@
 eng [--data-dir <archivio>] [comando] [workspace | global] [opzioni]
 ```
 
-`sync`, `setup`, `save`, `detach` e `tools install` applicano modifiche. `new` e `add` scrivono nell'archivio. `session-start`, lanciato dall'hook di Claude Code, aggiorna l'archivio e unisce i file configurati con `unisci`. I controlli mostrano lo stato e registrano il risultato nel log.
+`init`, `sync`, `setup`, `save`, `detach` e `tools install` applicano modifiche. `new` e `add` scrivono nell'archivio. `session-start`, lanciato dall'hook di Claude Code, aggiorna l'archivio e unisce i file configurati con `unisci`. I controlli mostrano lo stato e registrano il risultato nel log.
 
 ## Controllare
 
@@ -26,7 +26,10 @@ Il controllo elenca anche il lavoro da non perdere: file non committati, commit 
 |---|---|
 | `eng sync [ws...]` | Scarica l'archivio, sistema il computer, clona e aggiorna i repo, collega appunti e memoria, poi salva e invia note e memoria dei workspace. Senza nome: i workspace presenti su questo computer. |
 | `eng sync global` | Scarica l'archivio e sistema solo il computer. Non salva niente. |
+| `eng init [cartella]` | Crea un archivio nuovo da un esempio (default `~/engramma-dati`): repo Git con il primo commit, e salva il percorso in `~/.config/engramma/archive`. Rifiuta una cartella non vuota e non cambia un archivio già salvato. Poi si collega un repository privato. |
 | `eng setup` | Primo avvio su un computer nuovo. Uguale a `eng sync global`. |
+| `eng setup <cartella>` | Collega un archivio esistente: controlla che sia valido, salva il percorso e poi fa il setup. |
+| `eng setup <indirizzo Git> [cartella]` | Clona l'archivio (default `~/engramma-dati`), controlla che sia valido, salva il percorso e poi fa il setup. Se qualcosa fallisce, non resta niente. |
 | `eng save <ws>` | Commit dei soli file del workspace, con il messaggio `docs(<ws>): update notes and memory` (o quello passato dopo il nome), poi push. Non scarica e non tocca i repo. |
 | `eng save global` | Lo stesso per `global/` e `skills/`, con il messaggio `chore(global): update global configuration`. |
 | `eng tools install [ws \| global]` | mise installa i programmi mancanti, alla versione richiesta. Per quelli fuori da mise mostra il comando. |
@@ -42,7 +45,7 @@ Il controllo elenca anche il lavoro da non perdere: file non committati, commit 
 | Opzione | Con | Cosa fa |
 |---|---|---|
 | `--data-dir <dir>` | tutti, prima del comando | Usa un altro archivio solo per questa esecuzione. |
-| `-n`, `--dry-run` | `sync`, `setup`, `detach` | Mostra cosa farebbe, senza farlo. |
+| `-n`, `--dry-run` | `init`, `sync`, `setup`, `detach` | Mostra cosa farebbe, senza farlo. |
 | `-v`, `--verbose` | tutti tranne `save`, `new` e `add` | Mostra anche i controlli andati bene. |
 | `--path <dir>` | `sync` di un solo workspace | Dove stanno i suoi repo su questo computer. Viene ricordato in `~/.config/engramma/paths`. |
 | `-j`, `--jobs <n>` | `sync` | Quanti repo clonare o aggiornare insieme (default 3, o il valore di `~/.config/engramma/config`). |
@@ -59,14 +62,14 @@ threads = 3
 
 ## Nomi riservati
 
-Un workspace non può chiamarsi come un comando (`check`, `sync`, `setup`, `list`, `tools`, `integrations`, `save`, `new`, `add`, `log`, `detach`, `help`, `session-start`) né `global` o `all`. `eng new` li rifiuta.
+Un workspace non può chiamarsi come un comando (`check`, `sync`, `setup`, `init`, `list`, `tools`, `integrations`, `save`, `new`, `add`, `log`, `detach`, `help`, `session-start`) né `global` o `all`. `eng new` li rifiuta.
 
 ## Codici di uscita
 
 | Codice | Quando |
 |---|---|
 | `0` | Tutto a posto. |
-| `1` | Resta qualcosa da sistemare (il riepilogo dice cosa e con quale comando), oppure il comando è scritto male. |
+| `1` | Resta qualcosa da sistemare (il riepilogo dice cosa e con quale comando), oppure il comando è scritto male. Senza un archivio valido l'uscita è sempre `1`. |
 
 `eng list` esce sempre con `0`.
 
@@ -99,5 +102,7 @@ Il riepilogo finale raccoglie cosa sistemare, con il comando sotto ogni voce. Og
 | `ENGRAMMA_SLOW_REPO_SECONDS` | Dopo quanti secondi un repo è "lento" nel riepilogo (default 30). |
 | `NO_COLOR` | Output senza colori né zona animata. |
 | `PAGER` | Programma per `eng log` (default `less`). |
+
+Senza archivio valido `eng` mostra comunque la schermata, segnala il problema e controlla solo i comandi `eng`, mise e git; `eng setup` e `eng sync` creano i comandi `eng` ed `engramma`. Gli altri comandi si fermano con lo stesso messaggio.
 
 Ordine di scelta dell'archivio: `--data-dir`, poi `ENGRAMMA_DATA_DIR`, poi la prima riga di `~/.config/engramma/archive`, poi `ENGRAMMA_DIR`. Il file contiene un percorso letterale, anche con spazi, senza virgolette.

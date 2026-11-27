@@ -16,20 +16,18 @@ Linux o WSL, Bash 5+, Python 3.10+, Git, OpenSSH e [mise](https://mise.jdx.dev),
 
 ## Installazione
 
-Sostituisci `ACCOUNT/ARCHIVIO-PRIVATO` con il tuo archivio Git.
-
 ```bash
-git clone git@github.com:nikazzio/engramma-cli.git ~/engramma  # il programma
-git clone git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git ~/engramma-dati
-mkdir -p ~/.config/engramma && echo ~/engramma-dati > ~/.config/engramma/archive
-~/engramma/bin/sync.sh setup -n                      # mostra cosa cambierebbe
-~/engramma/bin/sync.sh setup                         # collega eng e la configurazione
+git clone git@github.com:nikazzio/engramma-cli.git ~/engramma     # il programma
+~/engramma/bin/sync.sh init                                       # archivio nuovo in ~/engramma-dati
+~/engramma/bin/sync.sh setup git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git  # oppure: archivio esistente
+~/engramma/bin/sync.sh setup -n                                   # mostra cosa cambierebbe
+~/engramma/bin/sync.sh setup                                      # collega eng e la configurazione
 ```
 
 > [!WARNING]
 > `setup` cambia la configurazione del computer: `~/.claude/CLAUDE.md`, le impostazioni di Claude Code e di Codex, i plugin. Controlla l’anteprima con `setup -n`. Per un file locale diverso da quello da collegare, Engramma ti chiede quale copia conservare.
 
-Non hai ancora un archivio? [Primi passi](docs/getting-started.md) spiega come crearlo.
+[Primi passi](docs/getting-started.md) spiega ogni passaggio, compreso il repository privato.
 
 ## Comandi essenziali
 
@@ -46,4 +44,4 @@ Elenco completo in [Comandi](docs/commands.md).
 
 ## Documentazione
 
-[Indice](docs/README.md) · [Primi passi](docs/getting-started.md) · [Concetti](docs/concepts.md) · [Problemi comuni](docs/troubleshooting.md) · [Roadmap beta](docs/roadmap.md) · [Contribuire](CONTRIBUTING.md) · [Licenza MIT](LICENSE)
+[Indice](docs/README.md) · [Primi passi](docs/getting-started.md) · [Concetti](docs/concepts.md) · [Problemi comuni](docs/troubleshooting.md) · [Roadmap](docs/roadmap.md) · [Contribuire](CONTRIBUTING.md) · [Licenza MIT](LICENSE)

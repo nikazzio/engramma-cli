@@ -183,3 +183,64 @@ teardown() {
 		[ "$status" -eq 0 ]
 	done
 }
+
+@test "check without an archive shows the screen, reports the problem and changes nothing" {
+	rm "$XDG_CONFIG_HOME/engramma/archive"
+	unset ENGRAMMA_DIR
+	local before
+	before="$(snapshot)"
+	run "$SYNC"
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"archivio:"*"non disponibile"* ]]
+	[[ "$output" == *"Archivio non configurato"* ]]
+	[[ "$output" == *"POSTAZIONE"* ]]
+	[ ! -e "$HOME/.local/bin/eng" ]
+	[ "$(snapshot)" = "$before" ]
+}
+
+@test "setup without an archive installs the commands and still reports the missing archive" {
+	rm "$XDG_CONFIG_HOME/engramma/archive"
+	unset ENGRAMMA_DIR
+	run "$SYNC" setup
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"Archivio non configurato"* ]]
+	[ "$(readlink "$HOME/.local/bin/eng")" = "$(realpath "$SYNC")" ]
+	[ "$(readlink "$HOME/.local/bin/engramma")" = "$(realpath "$SYNC")" ]
+}
+
+@test "setup dry run without an archive creates nothing" {
+	rm "$XDG_CONFIG_HOME/engramma/archive"
+	unset ENGRAMMA_DIR
+	run "$SYNC" setup -n
+	[ "$status" -eq 1 ]
+	[ ! -e "$HOME/.local/bin/eng" ]
+}
+
+@test "an invalid saved archive shows the screen with its path" {
+	printf '%s\n' "$TEST_ROOT/missing" >"$XDG_CONFIG_HOME/engramma/archive"
+	run "$SYNC"
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"Archivio non valido: $TEST_ROOT/missing"* ]]
+	[[ "$output" == *"POSTAZIONE"* ]]
+}
+
+@test "commands that need the archive stop with the same screen and write nothing" {
+	rm "$XDG_CONFIG_HOME/engramma/archive"
+	unset ENGRAMMA_DIR
+	for command in "list" "save demo" "new demo" "tools" "integrations"; do
+		# shellcheck disable=SC2086
+		run "$SYNC" $command
+		[ "$status" -eq 1 ]
+		[[ "$output" == *"Archivio non configurato"* ]]
+		[[ "$output" != *"POSTAZIONE"* ]]
+	done
+	[ ! -e "$HOME/.local/bin/eng" ]
+}
+
+@test "the log command works without an archive" {
+	rm "$XDG_CONFIG_HOME/engramma/archive"
+	unset ENGRAMMA_DIR
+	run "$SYNC" log
+	[[ "$output" == *"nessun log"* ]]
+	[[ "$output" != *"Archivio non configurato"* ]]
+}

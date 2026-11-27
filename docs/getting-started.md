@@ -4,39 +4,50 @@ Tre situazioni: crei l'archivio la prima volta, installi su un computer, aggiung
 
 ## 1. Creare l'archivio
 
-L'archivio è un repo Git privato. Crea un repository privato vuoto e sostituisci `ACCOUNT/ARCHIVIO-PRIVATO` con il suo percorso. Scarica il programma e parti dal suo esempio.
+L'archivio è un repo Git privato. Scarica il programma e fallo creare:
 
 ```bash
 git clone git@github.com:nikazzio/engramma-cli.git ~/engramma
-cp -r ~/engramma/examples/archive ~/engramma-dati
-cd ~/engramma-dati
-git init -b main
-git add -A && git commit -m "archivio iniziale"
-git remote add origin git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git
-git push -u origin main
+~/engramma/bin/sync.sh init        # crea ~/engramma-dati; con una cartella: init <cartella>
+```
+
+`init` copia un archivio di esempio (un workspace `demo` e una cartella `global/` minima), lo trasforma in un repo Git con il primo commit e salva il suo percorso in `~/.config/engramma/archive`. Non scrive in una cartella non vuota e non cambia un archivio già salvato. Con `-n` mostra cosa farebbe.
+
+Poi collega un repository **privato** vuoto, sostituendo `ACCOUNT/ARCHIVIO-PRIVATO`:
+
+```bash
+git -C ~/engramma-dati remote add origin git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git
+git -C ~/engramma-dati push -u origin main
 ```
 
 > [!IMPORTANT]
 > Il repo remoto deve essere **privato**: contiene le tue regole, i tuoi appunti e la memoria degli agenti. `git push -u` imposta il branch remoto: senza, `eng` salva solo in locale e lo segnala.
 
-L'esempio contiene un workspace `demo` e una cartella `global/` minima. Il significato di ogni file è in [Formato dell'archivio](archive-format.md).
+Il significato di ogni file è in [Formato dell'archivio](archive-format.md).
 
 ## 2. Installare su un computer
 
-Se hai appena creato l'archivio, il programma è già in `~/engramma`; altrimenti scaricalo con `git clone git@github.com:nikazzio/engramma-cli.git ~/engramma`.
+Con l'archivio appena creato, o con il programma già scaricato in `~/engramma`:
 
 ```bash
-mkdir -p ~/.config/engramma && echo ~/engramma-dati > ~/.config/engramma/archive
 ~/engramma/bin/sync.sh setup -n     # cosa cambierebbe
 ~/engramma/bin/sync.sh setup
 ```
 
-`setup` fa queste cose:
+Con un archivio che esiste già, `setup` lo collega: accetta la cartella oppure l'indirizzo Git, che viene clonato in `~/engramma-dati` (o nella cartella indicata dopo l'indirizzo):
+
+```bash
+~/engramma/bin/sync.sh setup git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git
+```
+
+`setup` controlla che sia un archivio valido, salva il suo percorso e poi fa queste cose:
 
 - collega i comandi `eng` ed `engramma` in `~/.local/bin`, che deve stare nel `PATH`;
 - controlla mise e, se manca, propone di installarlo;
 - collega o unisce i file di `global/links.txt`;
 - collega le skill generali e controlla plugin e integrazioni degli agenti.
+
+Senza archivio, `eng` parte lo stesso: segnala che manca, dice come crearlo o collegarlo, e controlla comunque i comandi `eng`, mise e git. `eng setup` crea i comandi anche in quel caso.
 
 > [!WARNING]
 > Se sul computer c'è già un file diverso da quello dell'archivio (per esempio `~/.claude/CLAUDE.md`), `setup` non lo tocca: lo segnala e, in un terminale, chiede quale tenere. Se tieni quella dell'archivio, la copia del computer finisce in `~/.local/state/engramma/backup/`.
@@ -61,10 +72,8 @@ eng sync acme                                   # clona, collega, salva
 ## 4. Un secondo computer
 
 ```bash
-git clone git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git ~/engramma-dati
 git clone git@github.com:nikazzio/engramma-cli.git ~/engramma
-mkdir -p ~/.config/engramma && echo ~/engramma-dati > ~/.config/engramma/archive
-~/engramma/bin/sync.sh setup
+~/engramma/bin/sync.sh setup git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git
 eng sync acme
 ```
 
