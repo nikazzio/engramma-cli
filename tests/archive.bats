@@ -74,7 +74,7 @@ teardown() {
 
 @test "archive selection rejects missing arguments and nested non-root directories" {
 	run "$SYNC" --data-dir
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	run "$SYNC" --data-dir "$ARCHIVE/workspaces" list
 	[ "$status" -eq 1 ]
 	mkdir -p "$ARCHIVE/nested/workspaces"

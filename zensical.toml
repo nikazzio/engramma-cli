@@ -1,0 +1,56 @@
+[project]
+site_name = "Engramma"
+site_description = "Note, regole e memoria degli agenti di sviluppo sui tuoi computer."
+site_url = "https://nikazzio.github.io/engramma-cli/"
+repo_name = "nikazzio/engramma-cli"
+repo_url = "https://github.com/nikazzio/engramma-cli"
+docs_dir = "docs"
+site_dir = "dist/site"
+nav = [
+  { "Guida" = "README.md" },
+  { "Primi passi" = "getting-started.md" },
+  { "Uso quotidiano" = [
+    { "Più computer" = "multi-computer.md" },
+    { "Agenti" = "agents.md" },
+    { "Programmi" = "tools.md" },
+    { "Problemi comuni" = "troubleshooting.md" },
+    { "Domande frequenti" = "faq.md" },
+  ] },
+  { "Riferimento" = [
+    { "Concetti" = "concepts.md" },
+    { "Comandi" = "commands.md" },
+    { "Formato dell’archivio" = "archive-format.md" },
+  ] },
+  { "Contribuire" = [
+    { "Sviluppo" = "development.md" },
+    { "Roadmap" = "roadmap.md" },
+  ] },
+]
+
+[project.theme]
+language = "it"
+font = false
+features = ["navigation.sections", "navigation.top", "content.code.copy"]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "indigo"
+toggle.icon = "lucide/sun"
+toggle.name = "Passa al tema scuro"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "indigo"
+toggle.icon = "lucide/moon"
+toggle.name = "Passa al tema chiaro"
+
+[project.markdown_extensions]
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+
+[project.validation]
+invalid_links = true
+invalid_link_anchors = true

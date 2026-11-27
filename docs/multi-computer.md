@@ -22,7 +22,7 @@ sequenceDiagram
 | Configurazione del computer e skill generali | `eng save global` |
 | Altri file dell'archivio | commit e push a mano, con Git |
 
-Se il push fallisce, rilancia lo stesso comando: riprova a inviare anche i commit già fatti.
+Se il push fallisce, rilancia lo stesso comando per ritentare anche i commit già fatti. Il riepilogo della memoria distingue il salvataggio locale dall’invio. Con `eng log` vedi i file, i conflitti e le esclusioni. [Inventario e log](commands.md#inventario-della-memoria)
 
 La prima volta che Claude scrive una memoria locale per un repo nuovo, lancia `eng sync <ws>` sullo stesso computer. Engramma la acquisisce nell’archivio, la collega al repo e la invia. Da quel momento puoi salvarne le modifiche anche con `eng save <ws>`.
 
@@ -30,8 +30,7 @@ La prima volta che Claude scrive una memoria locale per un repo nuovo, lancia `e
 
 `eng sync` scarica l'archivio solo in avanti. Se l'archivio ha commit locali non inviati e insieme commit nuovi sul remoto, non unisce da solo. Lo segnala e suggerisce `git pull --rebase` e `git push` nell'archivio.
 
-> [!TIP]
-> Prima di cambiare computer lancia `eng`. Elenca, per ogni repo di ogni workspace, i file non salvati, i commit non inviati e i branch che esistono solo qui.
+> **Suggerimento.** Prima di cambiare computer lancia `eng check --refresh`. Per i workspace presenti sul computer, elenca i file non salvati, i commit non inviati e i branch che esistono solo qui.
 
 ## Aggiornamento all'avvio di Claude Code
 

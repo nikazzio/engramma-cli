@@ -13,9 +13,9 @@ dir=$("${commands[$service]}" "${archive_args[@]}" --print-data-dir 2>/dev/null)
 local -a workspaces option_list
 workspaces=()
 [[ -n $dir ]] && workspaces=($dir/workspaces/*(N/:t))
-option_list=('--version:versione del programma')
+option_list=('--version:versione del programma' '--plain:output statico' '--non-interactive:salta le domande' '-h:aiuto' '--help:aiuto')
 if (( CURRENT == offset )); then
-	option_list+=('-h:aiuto' '--help:aiuto')
+	option_list+=('-v:mostra anche i controlli passati' '--verbose:mostra anche i controlli passati' '--refresh:aggiorna lo stato remoto')
 	(( offset == 2 )) && option_list+=('--data-dir:archivio per questa esecuzione')
 else
 	case $words[offset] in
@@ -23,20 +23,26 @@ else
 		sync|setup|detach) option_list+=('-n:mostra senza eseguire' '--dry-run:mostra senza eseguire') ;&
 		check) option_list+=('-v:mostra anche i controlli passati' '--verbose:mostra anche i controlli passati') ;;
 	esac
-	if [[ $words[offset] == sync ]]; then
+	if [[ $words[offset] == (check|global) ]]; then
+		option_list+=('--refresh:aggiorna lo stato remoto')
+	elif [[ $words[offset] == setup ]]; then
+		option_list+=('--wizard:configurazione guidata' '--agents:agenti da configurare' '--claude-memory:sincronizzazione memoria Claude')
+	elif [[ $words[offset] == sync ]]; then
 		option_list+=('--path:cartella dei repo' '-j:repo insieme' '--jobs:repo insieme' '--prune:cancella i branch obsoleti')
 	fi
 fi
 
 case $words[CURRENT-1] in
 	--path | --data-dir) _files -/; return ;;
+	--agents) _values -s , 'agenti' claude codex copilot none; return ;;
+	--claude-memory) compadd on off; return ;;
 	-j | --jobs) _message 'numero di repo insieme'; return ;;
 esac
 
 if [[ $PREFIX == -* ]]; then
 	_describe 'opzione' option_list
 elif (( CURRENT == offset )); then
-	local -a command_list=('check:controlla senza cambiare niente' 'sync:scarica, sistema e aggiorna i repo' 'setup:primo avvio del computer, o collega un archivio' 'init:crea un archivio nuovo' 'list:workspace e repo' 'tools:programmi installati e mancanti' 'integrations:integrazioni degli agenti' 'save:salva e invia un workspace' 'new:nuovo workspace' 'add:aggiunge un repo' 'log:ultimo log' 'detach:collegamenti in copie' 'help:aiuto' 'global:configurazione del computer')
+	local -a command_list=('check:controlla senza cambiare niente' 'sync:scarica, sistema e aggiorna i repo' 'setup:primo avvio del computer, o collega un archivio' 'init:crea un archivio nuovo' 'list:workspace e repo' 'tools:programmi installati e mancanti' 'integrations:integrazioni degli agenti' 'agents:agenti selezionati e memoria' 'save:salva e invia un workspace' 'new:nuovo workspace' 'add:aggiunge un repo' 'log:ultimo log' 'detach:collegamenti in copie' 'help:aiuto' 'global:configurazione del computer')
 	_describe 'comando' command_list
 	_describe 'workspace' workspaces
 elif [[ $words[offset] == detach ]]; then
@@ -49,7 +55,7 @@ elif [[ $words[offset] == (save|sync|check) ]]; then
 	compadd global $workspaces
 elif [[ $words[offset] == (init|setup) ]]; then
 	_files -/
-elif [[ $words[offset] == (new|log|integrations|help) ]] || { [[ $words[offset] == add ]] && (( CURRENT > offset + 1 )); }; then
+elif [[ $words[offset] == (new|log|integrations|agents|help) ]] || { [[ $words[offset] == add ]] && (( CURRENT > offset + 1 )); }; then
 	return 0
 else
 	compadd $workspaces

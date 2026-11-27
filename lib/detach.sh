@@ -21,7 +21,7 @@ detach_link() {
 	fi
 
 	staging="$(mktemp -d -- "$link.engramma-XXXXXXXX")" || { problem "${REF}$label${RESET}: impossibile preparare la copia"; return; }
-	if ! cp -aH -- "$target" "$staging/copy"; then
+	if ! cp -aH -- "$target" "$staging/copy" || ! diff -qr --no-dereference -- "$target" "$staging/copy" >/dev/null; then
 		rm -rf -- "$staging"
 		problem "${REF}$label${RESET}: copia fallita, il symlink resta"
 		return
@@ -104,6 +104,8 @@ detach_workspace() {
 		[[ -e "$WORKSPACE_DIR/$name/.git" ]] || continue
 		repo_begin "$name"
 		detach_repo_note "$WORKSPACE_DIR/$name" "$name"
+		detach_link "$WORKSPACE_DIR/$name/$SHARED_REPO_NOTE_FILE" "nota personale per gli agenti"
+		detach_link "$WORKSPACE_DIR/$name/$SHARED_WORKSPACE_RULES_FILE" "regole del workspace"
 		detach_repo_files "$WORKSPACE_DIR/$name" "$name"
 	done < <(repo_entries)
 }
@@ -111,7 +113,72 @@ detach_workspace() {
 detach_skills() {
 	local dir
 	section "skill"
-	for dir in "$CLAUDE_HOME"/skills/* "$CODEX_SKILLS_DIR"/*; do
+	for dir in "$CLAUDE_HOME"/skills/* "$CODEX_SKILLS_DIR"/* "$COPILOT_HOME_DIR"/skills/*; do
 		detach_link "$dir" "skill $(basename "$dir")"
+	done
+}
+
+# Scan linked memories on this workstation, including their old locations
+# after relocating a repo or workspace.
+detach_archive_memories() {
+	local entry target
+	for entry in "$CLAUDE_HOME"/projects/*/memory; do
+		[[ -L "$entry" ]] || continue
+		target="$(readlink "$entry")"
+		case "$target" in
+			"$ENGRAMMA_DIR"/workspaces/*/memory/*)
+				detach_link "$entry" "memoria di Claude in $(tilde "$entry")"
+				;;
+		esac
+	done
+}
+
+detach_agent_configuration() {
+	local agent="$1" source destination entry root
+	while read -r source destination _; do
+		destination="$(expand_global_destination "$destination")" || continue
+		[[ "$(global_link_agent "$source" "$destination")" == "$agent" ]] || continue
+		detach_link "$destination" "$source"
+	done < <(global_entries)
+	case "$agent" in
+		claude) root="$CLAUDE_HOME/skills" ;;
+		codex) root="$CODEX_SKILLS_DIR" ;;
+		copilot) root="$COPILOT_HOME_DIR/skills" ;;
+	esac
+	for entry in "$root"/*; do
+		detach_link "$entry" "skill ${entry##*/} ($agent)"
+	done
+	detach_workspace_agent_files "$agent"
+}
+
+detach_workspace_agent_files() {
+	local agent="$1" notes name repo filename
+	for notes in "$ENGRAMMA_DIR"/workspaces/*/; do
+		[[ -d "$notes" ]] || continue
+		load_workspace "$(basename "$notes")"
+		case "$agent" in
+			claude) detach_link "$WORKSPACE_DIR/.claude" "configurazione Claude del workspace" ;;
+			shared) detach_link "$WORKSPACE_DIR/AGENTS.md" "regole del workspace" ;;
+		esac
+		while read -r name _; do
+			repo="$WORKSPACE_DIR/$name"
+			[[ -e "$repo/.git" ]] || continue
+			case "$agent" in
+				claude)
+					detach_repo_note "$repo" "$name"
+					for filename in .claude CLAUDE.md CLAUDE.local.md; do detach_link "$repo/$filename" "$filename"; done
+					;;
+				codex) detach_link "$repo/.codex" "configurazione Codex" ;;
+				copilot) detach_link "$repo/.copilot" "configurazione Copilot" ;;
+				shared)
+					project_skills "$repo" "$name" detach
+					for filename in .agents AGENTS.md AGENTS.override.md; do detach_link "$repo/$filename" "$filename"; done
+					;&
+				context)
+					detach_link "$repo/$SHARED_REPO_NOTE_FILE" "nota personale per gli agenti"
+					detach_link "$repo/$SHARED_WORKSPACE_RULES_FILE" "regole del workspace"
+					;;
+			esac
+		done < <(repo_entries)
 	done
 }

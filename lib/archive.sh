@@ -49,3 +49,21 @@ validate_archive() {
 		return 1
 	fi
 }
+
+# Lock the archive directory itself. No file is added to the user's repository,
+# and alternate spellings of the same directory share the same lock.
+lock_archive() {
+	local archive_fd
+	if ! exec {archive_fd}<"$ENGRAMMA_DIR" || ! flock -x -w 5 "$archive_fd"; then
+		echo "Archivio occupato o inaccessibile: $ENGRAMMA_DIR. Riprova tra poco." >&2
+		return 1
+	fi
+}
+
+# The workstation selection and paths are shared even across distinct archives.
+lock_config() {
+	local config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/engramma" config_fd
+	mkdir -p -- "$config_dir" &&
+		exec {config_fd}<"$config_dir" &&
+		flock -x -w 5 "$config_fd"
+}

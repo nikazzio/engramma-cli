@@ -177,6 +177,6 @@ check_environment() {
 	section "ambiente"
 	check_commands
 	check_node_version
-	check_ssh
+	if $NETWORK_CHECKS; then check_ssh; fi
 	check_hosts
 }

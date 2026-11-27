@@ -51,7 +51,7 @@ teardown() {
 	[ "$status" -eq 0 ]
 
 	run "$SYNC" sync global demo
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 
 	run "$SYNC" detach global
 	[ "$status" -eq 0 ]

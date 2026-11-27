@@ -4,7 +4,7 @@
 # The symbols of the outcomes, in three sets: nerd (Nerd Font glyphs, codes in
 # the Font Awesome range of the font), unicode (ordinary symbols) and ascii.
 # ENGRAMMA_ICONS or the line "icons = <set>" of ~/.config/engramma/config picks
-# one. Without a choice: nerd in a terminal, ascii in a pipe or a log, where a
+# one. Without a choice: unicode in a terminal, ascii in a pipe or a log, where a
 # private glyph would be a stray character. Every icon takes one column.
 
 # The set named in the configuration file, empty when there is none.
@@ -19,7 +19,7 @@ load_icons() {
 	[[ -n "$set" ]] || set="$(configured_icons)"
 	case "$set" in
 		nerd | unicode | ascii) ;;
-		*) if $IS_INTERACTIVE; then set=nerd; else set=ascii; fi ;;
+		*) if [[ -t 1 ]] && ! $PLAIN; then set=unicode; else set=ascii; fi ;;
 	esac
 	ICON_SET="$set"
 	case "$set" in

@@ -7,6 +7,17 @@
 say_done() { echo " ${GREEN}✓${RESET} $*"; }
 say_fail() { echo " ${RED}✗${RESET} $*" >&2; }
 
+workspace_save_paths() {
+	printf 'workspaces/%s\n' "$1"
+	if [[ "$CLAUDE_MEMORY" == off ]]; then
+		printf ':(exclude,literal)workspaces/%s/memory\n' "$1"
+	fi
+}
+
+has_unsynced_claude_memory() {
+	[[ "$CLAUDE_MEMORY" == off && -n "$(engramma_git status --porcelain -- "workspaces/$1/memory")" ]]
+}
+
 # Commits, and pushes, only the files of one workspace (or of the global part):
 # the notes of different sessions stay in separate commits.
 save_engramma() {
@@ -18,14 +29,18 @@ save_engramma() {
 		message="${message:-chore(global): update global configuration}"
 	else
 		is_workspace "$area" || fail_usage "Workspace sconosciuto: '$area' (ci sono: $(available_workspaces), oppure global)"
-		paths=("workspaces/$area")
+		mapfile -t paths < <(workspace_save_paths "$area")
 		message="${message:-docs($area): update notes and memory}"
 	fi
 	is_engramma_repo || { say_fail "$(path "$ENGRAMMA_DIR") non è un repo git"; return 1; }
 	MODE=run check_git_lock "$ENGRAMMA_DIR"
+	if [[ "$area" != global ]] && has_unsynced_claude_memory "$area"; then
+		echo "   memoria di Claude esclusa dal salvataggio di $area"
+		memory_worktree_changes "$area" esclusi "sincronizzazione della memoria disattivata"
+	fi
 	changed="$(engramma_git status --porcelain -- "${paths[@]}" | wc -l)"
 	if ((changed == 0)); then
-		echo " ${DIM}niente da salvare in ${paths[*]}${RESET}"
+		echo " ${DIM}niente da salvare in $area${RESET}"
 		has_engramma_remote || return 0
 		ahead="$(engramma_git rev-list --count '@{upstream}..HEAD' 2>/dev/null)" || {
 			say_fail "impossibile verificare i commit da inviare al remoto"
@@ -34,15 +49,15 @@ save_engramma() {
 		((ahead)) || return 0
 		echo " $ahead commit già salvati da inviare al remoto"
 	else
-		if ! engramma_git add -A -- "${paths[@]}" || ! engramma_git commit -q -m "$message" -- "${paths[@]}"; then
+		if ! commit_archive_with_memory_report "$message" "${paths[@]}"; then
 			say_fail "commit fallito"
 			return 1
 		fi
 		say_done "$changed file in un commit ${REF}$(engramma_git rev-parse --short HEAD)${RESET} ${DIM}· $message${RESET}"
 	fi
-	has_engramma_remote || return 0
+	has_engramma_remote || { memory_unsent_without_remote; return 0; }
 	load_ssh_agent
-	if GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10" engramma_git push -q 2>/dev/null; then
+	if push_archive_with_memory_report; then
 		say_done "push fatto: gli altri computer lo ricevono con ${CMD}eng sync${RESET}"
 	else
 		say_fail "push fallito ${DIM}(chiave SSH nell'agent? poi ${CMD}git -C $(tilde "$ENGRAMMA_DIR") push${RESET}${DIM})${RESET}"
@@ -55,7 +70,13 @@ save_engramma() {
 send_workspace_updates() {
 	local area paths=() changed ahead behind
 	[[ "$(engramma_git rev-parse --show-toplevel 2>/dev/null)" == "$ENGRAMMA_DIR" ]] || return 0
-	for area in "$@"; do paths+=("workspaces/$area"); done
+	for area in "$@"; do
+		mapfile -t -O "${#paths[@]}" paths < <(workspace_save_paths "$area")
+		if has_unsynced_claude_memory "$area"; then
+			warn "memoria di Claude esclusa dal salvataggio di $area"
+			memory_worktree_changes "$area" esclusi "sincronizzazione della memoria disattivata"
+		fi
+	done
 	if [[ -n "$(engramma_git ls-files -u)" ]] || engramma_git rev-parse -q --verify MERGE_HEAD >/dev/null; then
 		problem "Merge pendente nell'archivio: completalo prima di ripetere eng sync"
 		return
@@ -63,7 +84,7 @@ send_workspace_updates() {
 	if ((${#paths[@]})); then
 		changed="$(engramma_git status --porcelain -- "${paths[@]}")" || { problem "Impossibile leggere le modifiche dell'archivio"; return; }
 		if [[ -n "$changed" ]]; then
-			if ! engramma_git add -A -- "${paths[@]}" || ! engramma_git commit -q -m "Update workspace context" -- "${paths[@]}"; then
+			if ! commit_archive_with_memory_report "Update workspace context" "${paths[@]}"; then
 				problem "Salvataggio locale fallito: verifica l'archivio prima di cambiare computer"
 				return
 			fi
@@ -71,21 +92,24 @@ send_workspace_updates() {
 		fi
 	fi
 	if ! has_engramma_remote; then
+		memory_unsent_without_remote
 		problem "Archivio solo locale: configura il branch remoto per inviare il contesto"
 		return
 	fi
 	if [[ "$ENGRAMMA_FETCH" != ok ]]; then
+		memory_pending_send "fetch fallito; confronto con l’ultimo stato remoto noto"
 		problem "Archivio conservato su questo computer: ricezione e invio non confermati. Riprova con eng sync"
 		return
 	fi
 	behind="$(engramma_git rev-list --count 'HEAD..@{upstream}')" || { problem "Stato remoto non verificato"; return; }
 	if ((behind)); then
+		memory_pending_send "aggiornamenti remoti non applicati"
 		problem "Aggiornamenti remoti non applicati: contesto locale conservato, invio sospeso"
 		return
 	fi
 	ahead="$(engramma_git rev-list --count '@{upstream}..HEAD')" || { problem "Commit da inviare non verificati"; return; }
 	((ahead)) || return 0
-	if GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10" engramma_git push --quiet 2>/dev/null; then
+	if push_archive_with_memory_report; then
 		ok "$ahead commit dell'archivio inviati"
 	else
 		problem "Commit salvati su questo computer, invio fallito: riprova con eng sync"
@@ -156,10 +180,6 @@ add_repo() (
 		say_fail "la cartella del workspace deve stare nell'archivio"
 		return 1
 	fi
-	if ! exec 9<"$ENGRAMMA_DIR/workspaces/$name" || ! flock -x 9; then
-		say_fail "impossibile bloccare la lista dei repo"
-		return 1
-	fi
 	if [[ -L "$file" || ( -e "$file" && ! -f "$file" ) ]]; then
 		say_fail "la lista dei repo deve essere un file regolare"
 		return 1
@@ -186,7 +206,7 @@ add_repo() (
 # The log of the last run: in the pager in a terminal, printed otherwise.
 show_last_log() {
 	local last
-	last="$(find "$LOG_DIR" -maxdepth 1 -name '*.log' 2>/dev/null | sort | tail -n 1)"
+	IFS= read -r -d '' last < <(logs_newest_first) || last=""
 	[[ -n "$last" ]] || { say_fail "nessun log in $(path "$LOG_DIR")"; return 1; }
 	if $IS_INTERACTIVE; then
 		${PAGER:-less} "$last"

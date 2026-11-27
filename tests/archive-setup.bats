@@ -87,7 +87,7 @@ teardown() {
 @test "init is not a name a workspace can take" {
 	git -C "$SOURCE" config user.name Test
 	run "$SYNC" --data-dir "$SOURCE" new init
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	[[ "$output" == *"nome riservato"* ]]
 }
 
@@ -159,4 +159,49 @@ teardown() {
 	[ "$status" -eq 1 ]
 	[[ "$output" == *"né un indirizzo Git"* ]]
 	[ ! -e "$ARCHIVE_CONFIG" ]
+}
+
+@test "help is available without archive and invalid arguments cannot install anything" {
+	run "$SYNC" sync --help
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"Uso: eng sync"*"eng sync demo --dry-run"* ]]
+	run bash -c '"$1" setup --bad-option >"$2" 2>"$3"' _ "$SYNC" "$TEST_ROOT/out" "$TEST_ROOT/err"
+	[ "$status" -eq 2 ]
+	[ ! -s "$TEST_ROOT/out" ]
+	grep -qF 'Opzione sconosciuta: --bad-option' "$TEST_ROOT/err"
+	[ ! -e "$HOME/.local/bin/eng" ]
+	[ ! -e "$ARCHIVE_CONFIG" ]
+	run "$SYNC" integrations inesperato
+	[ "$status" -eq 2 ]
+}
+
+@test "init prints a usable path to setup even when eng is absent and paths contain spaces" {
+	run "$SYNC" init "$HOME/dati con spazi"
+	[ "$status" -eq 0 ]
+	[[ "$output" == *'~/dati\ con\ spazi remote add origin git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git'* ]]
+	[[ "$output" == *"infine: $(realpath "$SYNC") setup"* ]]
+	[ ! -e "$HOME/.local/bin/eng" ]
+}
+
+@test "detach all forgets its saved archive only after success" {
+	"$SYNC" setup "$SOURCE"
+	run "$SYNC" detach all --dry-run
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"dimenticherei l’archivio"* ]]
+	[ "$(cat "$ARCHIVE_CONFIG")" = "$SOURCE" ]
+	run "$SYNC" detach all
+	[ "$status" -eq 0 ]
+	[ ! -e "$ARCHIVE_CONFIG" ]
+	[ -d "$SOURCE/.git" ]
+	run "$SYNC" --print-data-dir
+	[ "$status" -eq 1 ]
+}
+
+@test "detaching an alternate archive preserves the default archive and commands" {
+	"$SYNC" setup "$SOURCE"
+	git clone -q "$SOURCE" "$TEST_ROOT/second"
+	run "$SYNC" --data-dir "$TEST_ROOT/second" detach all
+	[ "$status" -eq 0 ]
+	[ "$(cat "$ARCHIVE_CONFIG")" = "$SOURCE" ]
+	[ -L "$HOME/.local/bin/eng" ]
 }

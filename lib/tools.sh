@@ -81,6 +81,7 @@ tools_area() {
 
 	while IFS= read -r command; do
 		[[ -n "$command" ]] || continue
+		if [[ "$title" == global ]] && ! agent_requirement_enabled "$command"; then continue; fi
 		shown=true
 		optional="" hint=""
 		read -r _ optional _ <<<"$(read_list_file "$requires" | awk -v c="$command" '$1 == c' | sed 's/#.*//' | head -n 1)"

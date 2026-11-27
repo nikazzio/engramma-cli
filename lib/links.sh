@@ -2,12 +2,14 @@
 # shellcheck disable=SC2153 # FILE, REF, CMD and the other colors come from lib/theme.sh
 
 REPO_NOTE_FILE="CLAUDE.local.md"
+SHARED_REPO_NOTE_FILE=".engramma-notes.md"
+SHARED_WORKSPACE_RULES_FILE=".engramma-workspace.md"
 
 # With "adopt" a real folder in place of the link is merged into engramma even
 # when it has files engramma lacks: only for folders that belong to engramma,
 # like the memory Claude Code writes before the link exists.
 ensure_link() {
-	local target="$1" link="$2" label="$3" adopt="${4:-}" pending
+	local target="$1" link="$2" label="$3" adopt="${4:-}" copied_var="${5:-}" pending
 
 	for pending in "$link".engramma-*/original; do
 		[[ -d "$pending" ]] || continue
@@ -30,7 +32,7 @@ ensure_link() {
 	fi
 
 	if [[ -d "$link" && "$target" == "$ENGRAMMA_DIR"/* && ! -f "$target" ]]; then
-		adopt_directory "$target" "$link" "$label" "$adopt"
+		adopt_directory "$target" "$link" "$label" "$adopt" "$copied_var"
 		return
 	fi
 
@@ -81,7 +83,7 @@ report_repo_in_place_of_link() {
 # from engramma stop everything, so nothing is ever overwritten; a backup of the
 # whole folder stays in $BACKUP_DIR, outside the archive.
 adopt_directory() {
-	local target="$1" link="$2" label="$3" adopt="$4" relative new=() different=()
+	local target="$1" link="$2" label="$3" adopt="$4" copied_var="${5:-}" relative new=() different=()
 	if [[ -n "$(find "$link" -mindepth 1 ! -type f ! -type d -print -quit)" ]]; then
 		problem "${REF}$label${RESET}: la cartella contiene collegamenti o elementi speciali; la lascio intatta"
 		return
@@ -93,7 +95,7 @@ adopt_directory() {
 		elif ! cmp -s "$link/$relative" "$target/$relative"; then
 			different+=("$relative")
 		fi
-	done < <(cd "$link" && find . -type f -print0)
+	done < <(cd "$link" && find . -type f -print0 | LC_ALL=C sort -z)
 
 	if ((${#new[@]})) && [[ "$adopt" != adopt ]]; then
 		problem "${REF}$label${RESET}: cartella locale con ${#new[@]} file che engramma non ha, non la tocco ${DIM}($(path "$link"))${RESET}"
@@ -131,6 +133,10 @@ adopt_directory() {
 					! cmp -s -- "$link/$relative" "$target/$relative"; then
 					problem "${REF}$label${RESET}: copia non riuscita o diversa dall'originale; cartella locale intatta, backup in $(path "$backup")"
 					return
+				fi
+				if [[ -n "$copied_var" ]]; then
+					local -n copied="$copied_var"
+					copied+=("$relative")
 				fi
 			done
 			if ! diff -qr "$link" "$backup" >/dev/null; then
@@ -225,6 +231,7 @@ ensure_repo_note() {
 
 project_skills() {
 	local repo="$1" name="$2" action="$3" target rel link skill
+	if [[ "$action" == link ]] && $EXPLICIT_AGENTS && [[ "$ACTIVE_AGENTS" == none ]]; then return 0; fi
 	for target in "$WORKSPACE_NOTES_DIR/skills/$name"/*; do
 		[[ -d "$target" && ! -L "$target" && -f "$target/SKILL.md" ]] || continue
 		skill="${target##*/}"
@@ -266,6 +273,7 @@ ensure_repo_files() {
 	for source in "$files_dir"/* "$files_dir"/.[!.]*; do
 		[[ -e "$source" ]] || continue
 		file="$(basename "$source")"
+		repo_agent_file_enabled "$file" || continue
 		# A file the team versions stays theirs: a link would show up as a change.
 		if [[ -n "$(git -C "$repo" ls-files -- ":(literal)$file" 2>/dev/null)" ]]; then
 			problem "${FILE}$file${RESET}: versionato nel repo, non lo collego ${DIM}(repo-files/$name/$file)${RESET}"
@@ -318,12 +326,13 @@ link_workspace_notes() {
 
 	local entry
 	for entry in .claude docs AGENTS.md mise.toml; do
+		repo_agent_file_enabled "$entry" || continue
 		[[ -e "$WORKSPACE_NOTES_DIR/$entry" ]] || continue
 		ensure_link "$WORKSPACE_NOTES_DIR/$entry" "$WORKSPACE_DIR/$entry" "$entry"
 	done
 	check_codex_instructions_size "$WORKSPACE_NOTES_DIR/AGENTS.md" "AGENTS.md del workspace"
 
-	if [[ -f "$WORKSPACE_DIR/CLAUDE.md" && -f "$WORKSPACE_NOTES_DIR/.claude/CLAUDE.md" ]]; then
+	if agent_enabled claude && [[ -f "$WORKSPACE_DIR/CLAUDE.md" && -f "$WORKSPACE_NOTES_DIR/.claude/CLAUDE.md" ]]; then
 		problem "CLAUDE.md residuo nella cartella del workspace: Claude caricherebbe le regole due volte ${DIM}(da cancellare a mano)${RESET}"
 	fi
 }
@@ -332,33 +341,77 @@ link_memories() {
 	section "memoria di Claude"
 	link_memory _workspace "$WORKSPACE_DIR" "memoria del workspace"
 
-	local name
+	local name directory
+	local -A registered=([_workspace]=1)
 	while read -r name _; do
+		[[ -n "$name" && ! -v 'registered[$name]' ]] || continue
+		registered[$name]=1
 		link_memory "$name" "$WORKSPACE_DIR/$name" "memoria di $name"
 	done < <(repo_entries)
+	for directory in "$WORKSPACE_NOTES_DIR"/memory/* "$WORKSPACE_NOTES_DIR"/memory/.[!.]*; do
+		[[ -e "$directory" || -L "$directory" ]] || continue
+		name="${directory##*/}"
+		[[ ! -v 'registered[$name]' ]] || continue
+		memory_unregistered_scope "$directory" "$WORKSPACE_NAME/$name"
+	done
 }
 
 link_memory() {
-	local key="$1" project_dir="$2" label="$3" memory_dir
-	memory_dir="$(claude_memory_dir_for "$project_dir")"
-
-	# A memory written on this computer before engramma had one is moved into it.
-	if [[ -d "$WORKSPACE_NOTES_DIR/memory/$key" ]] ||
-		[[ -d "$memory_dir" && ! -L "$memory_dir" && -n "$(ls -A "$memory_dir")" ]]; then
-		ensure_link "$WORKSPACE_NOTES_DIR/memory/$key" "$memory_dir" "$label" adopt
-	fi
+	local key="$1" project_dir="$2" label="$3"
+	inventory_memory_scope "$WORKSPACE_NOTES_DIR/memory/$key" "$(claude_memory_dir_for "$project_dir")" "$WORKSPACE_NAME/$key" "$label"
 }
 
 link_skills() {
-	local source
 	section "skill"
+	link_agent_skills "$CLAUDE_HOME/skills" ""
+	report_unversioned_skills
+}
+
+link_agent_skills() {
+	local destination="$1" label="$2" source
 	for source in "$ENGRAMMA_DIR"/skills/*/; do
 		[[ -d "$source" ]] || continue
 		source="${source%/}"
-		ensure_link "$source" "$CLAUDE_HOME/skills/$(basename "$source")" "skill $(basename "$source")"
+		ensure_link "$source" "$destination/${source##*/}" "skill ${source##*/}${label:+ ($label)}"
 	done
-	remove_orphan_skill_links "$CLAUDE_HOME/skills" ""
-	report_unversioned_skills
+	remove_orphan_skill_links "$destination" "${label:+ ($label)}"
+}
+
+repo_agent_file_enabled() {
+	$EXPLICIT_AGENTS || return 0
+	case "$1" in
+		.claude | CLAUDE.md | CLAUDE.local.md) agent_enabled claude ;;
+		.codex) agent_enabled codex ;;
+		.copilot) agent_enabled copilot ;;
+		.agents | AGENTS.md | AGENTS.override.md) [[ "$ACTIVE_AGENTS" != none ]] ;;
+		*) return 0 ;;
+	esac
+}
+
+link_shared_repo_context() {
+	local repo="$1" name="$2"
+	link_repo_context_file "$repo" "$WORKSPACE_NOTES_DIR/AGENTS.md" "$SHARED_WORKSPACE_RULES_FILE" "regole del workspace"
+	link_repo_context_file "$repo" "$WORKSPACE_NOTES_DIR/repo-notes/$name.md" "$SHARED_REPO_NOTE_FILE" "nota personale per gli agenti"
+}
+
+link_repo_context_file() {
+	local repo="$1" source="$2" file="$3" label="$4" destination="$1/$3"
+	[[ -f "$source" ]] || return 0
+	if [[ -n "$(git -C "$repo" ls-files -- "$file")" ]]; then
+		problem "$file è già versionato nel repo, lascio intatto il file del team"
+		return
+	fi
+	if [[ -L "$destination" ]]; then
+		if [[ "$(readlink "$destination")" != "$source" ]]; then
+			problem "$file è collegato altrove, lascio intatto il collegamento"
+			return
+		fi
+	elif [[ -e "$destination" ]] && ! cmp -s -- "$source" "$destination"; then
+		problem "$file è già presente e diverso, lascio intatta la copia locale"
+		return
+	fi
+	ensure_excluded "$repo" "/$file"
+	ensure_link "$source" "$destination" "$label"
 }
 
 # A link left by a skill removed from engramma: only links that point into

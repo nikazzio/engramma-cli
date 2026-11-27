@@ -229,3 +229,19 @@ log_files() {
 	run "$SYNC" check demo
 	[[ "$output" != *"log: ~"* ]]
 }
+
+@test "plain disables control codes in a terminal" {
+	run_in_terminal 90 "" '"$SYNC" sync demo --plain --non-interactive'
+	[ "$status" -eq 0 ]
+	[[ "$output" != *$'\e'* ]]
+	[[ "$output" == *"tutto a posto"* ]]
+}
+
+@test "warnings are visible and do not report an all-clear" {
+	"$SYNC" sync demo >/dev/null
+	echo fittizio >"$WORKSPACE/alpha/local.txt"
+	run "$SYNC" check demo
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"operazione conclusa con avvisi"* ]]
+	[[ "$output" != *"tutto a posto"* ]]
+}

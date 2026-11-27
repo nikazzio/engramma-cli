@@ -3,40 +3,23 @@
 
 # What eng does when the archive is missing or invalid: the same screen as every
 # other run, the problem reported once, and the steps that need only the program
-# itself (the eng commands, mise, git, SSH). Anything that reads or writes the
+# itself (the eng commands, mise and git). Anything that reads or writes the
 # archive is not run: with no archive ENGRAMMA_DIR is empty.
 run_without_archive() {
-	local command="${1:-check}"
-	[[ "$command" != -* ]] || command=check
+	local command="$COMMAND"
 	if [[ "$command" == session-start ]]; then
 		echo "$ARCHIVE_ERROR" >&2
 		exit 1
 	fi
-
-	# shellcheck disable=SC2034 # read by the output and link modules
-	MODE=check
-	local argument
-	case "$command" in
-		sync | setup)
-			MODE=run
-			for argument in "$@"; do
-				# shellcheck disable=SC2034 # read by the output and link modules
-				[[ "$argument" == -n || "$argument" == --dry-run ]] && MODE=dry
-			done
-			;;
-	esac
-
-	for argument in "$@"; do
-		# shellcheck disable=SC2034 # read by the output module
-		[[ "$argument" == -v || "$argument" == --verbose ]] && VERBOSE=true
-	done
-	use_output_style
 
 	start_log
 	print_header "$command"
 	heading "ARCHIVIO"
 	block "archivio" "${ARCHIVE_PATH:+$(tilde "$ARCHIVE_PATH")}" "controlli"
 	problem "$ARCHIVE_ERROR"
+	if [[ -z "$ARCHIVE_PATH" ]]; then
+		fix_with 5 "$(shell_path "$PROGRAM_DIR/bin/sync.sh") init"
+	fi
 
 	case "$command" in
 		check | sync | setup)
@@ -44,7 +27,6 @@ run_without_archive() {
 			block "programma" "$(tilde "$PROGRAM_DIR")" "controlli"
 			ensure_engramma_command
 			use_mise_tools
-			load_ssh_agent
 			block "programmi" "mise · git" "programmi"
 			ensure_mise
 			if command -v git >/dev/null; then
@@ -85,34 +67,64 @@ check_saved_archive() {
 	return 1
 }
 
-remember_archive() {
+# Recheck the choice while holding the workstation configuration lock.
+remember_archive() (
 	local staging
-	mkdir -p -- "$(dirname "$ARCHIVE_CONFIG_FILE")" || return 1
+	lock_config || return 1
+	check_saved_archive "$1" || return 1
 	staging="$(mktemp -- "$ARCHIVE_CONFIG_FILE.XXXXXXXX")" || return 1
-	if ! printf '%s\n' "$1" >"$staging" || ! mv -T -- "$staging" "$ARCHIVE_CONFIG_FILE"; then
-		rm -f -- "$staging"
-		return 1
+	trap 'rm -f -- "$staging"' EXIT
+	printf '%s\n' "$1" >"$staging" && mv -T -- "$staging" "$ARCHIVE_CONFIG_FILE"
+)
+
+has_other_saved_archive() {
+	local current=""
+	[[ -f "$ARCHIVE_CONFIG_FILE" ]] || return 1
+	IFS= read -r current <"$ARCHIVE_CONFIG_FILE" || true
+	[[ -n "$current" && "$(realpath -m -- "$current")" != "$ENGRAMMA_DIR" ]]
+}
+
+forget_archive() {
+	local current=""
+	[[ -f "$ARCHIVE_CONFIG_FILE" ]] || return 0
+	IFS= read -r current <"$ARCHIVE_CONFIG_FILE" || true
+	[[ -n "$current" && "$(realpath -m -- "$current")" == "$ENGRAMMA_DIR" ]] || return 0
+	if [[ "$MODE" == dry ]]; then
+		would "dimenticherei l’archivio in $(path "$ARCHIVE_CONFIG_FILE")"
+	elif forget_saved_archive; then
+		ok "archivio scollegato da questa postazione"
+	else
+		problem "impossibile dimenticare l’archivio in $(path "$ARCHIVE_CONFIG_FILE")"
+	fi
+}
+
+forget_saved_archive() (
+	local current=""
+	lock_config || return 1
+	[[ -f "$ARCHIVE_CONFIG_FILE" ]] || return 0
+	IFS= read -r current <"$ARCHIVE_CONFIG_FILE" || true
+	[[ -n "$current" && "$(realpath -m -- "$current")" == "$ENGRAMMA_DIR" ]] || return 0
+	rm -- "$ARCHIVE_CONFIG_FILE"
+)
+
+shell_path() {
+	local value="$1"
+	if [[ "$value" == "$HOME/"* ]]; then
+		# shellcheck disable=SC2088 # Print a literal tilde for the command to paste.
+		printf '~/%q' "${value#"$HOME/"}"
+	else
+		printf '%q' "$value"
 	fi
 }
 
 # eng init [folder]: a new archive from the example, a Git repo with its first commit.
 init_archive() {
-	local destination="" dry=false argument staging parent
-	for argument in "$@"; do
-		case "$argument" in
-			-n | --dry-run) dry=true ;;
-			-*) fail_usage "eng init non accetta l'opzione $argument" ;;
-			*)
-				[[ -z "$destination" ]] || fail_usage "Uso: eng init [cartella]"
-				destination="$argument"
-				;;
-		esac
-	done
+	local destination="$1" staging parent
 	destination="$(realpath -m -- "${destination:-$DEFAULT_ARCHIVE_DIR}")" || return 1
 	[[ -d "$ARCHIVE_TEMPLATE" ]] || { say_fail "manca l'archivio di esempio $(path "$ARCHIVE_TEMPLATE")"; return 1; }
 	is_free_folder "$destination" || { say_fail "$(path "$destination") esiste e non è vuota: non la tocco"; return 1; }
 	check_saved_archive "$destination" || return 1
-	if $dry; then
+	if [[ "$MODE" == dry ]]; then
 		echo " ${CYAN}◇${RESET} creerei l'archivio in $(path "$destination") e salverei il percorso in $(path "$ARCHIVE_CONFIG_FILE")"
 		return 0
 	fi
@@ -137,12 +149,15 @@ init_archive() {
 		return 1
 	fi
 	say_done "archivio creato in $(path "$destination")"
-	remember_archive "$destination" || { say_fail "percorso non salvato in $(path "$ARCHIVE_CONFIG_FILE")"; return 1; }
+	if ! remember_archive "$destination"; then
+		say_fail "archivio creato, percorso non salvato. Per collegarlo: $(shell_path "$PROGRAM_DIR/bin/sync.sh") setup $(shell_path "$destination")"
+		return 1
+	fi
 	say_done "percorso salvato in $(path "$ARCHIVE_CONFIG_FILE")"
 	echo "   ${DIM}poi, con un repository privato vuoto:${RESET}"
-	echo "   ${CMD}git -C $(tilde "$destination") remote add origin <indirizzo del repository>${RESET}"
-	echo "   ${CMD}git -C $(tilde "$destination") push -u origin main${RESET}"
-	echo "   ${DIM}infine:${RESET} ${CMD}eng setup${RESET}"
+	echo "   ${CMD}git -C $(shell_path "$destination") remote add origin git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git${RESET}"
+	echo "   ${CMD}git -C $(shell_path "$destination") push -u origin main${RESET}"
+	echo "   ${DIM}infine:${RESET} ${CMD}$(shell_path "$PROGRAM_DIR/bin/sync.sh") setup${RESET}"
 }
 
 is_git_address() {
@@ -152,23 +167,13 @@ is_git_address() {
 # eng setup <folder or address> [folder]: connects an existing archive, then runs
 # the normal setup.
 attach_archive() {
-	local source="" destination="" dry=false argument staging directory setup_args=()
-	for argument in "$@"; do
-		case "$argument" in
-			-n | --dry-run) dry=true ;;
-			-*) fail_usage "Opzione sconosciuta: $argument" ;;
-			*)
-				if [[ -z "$source" ]]; then
-					source="$argument"
-				elif [[ -z "$destination" ]]; then
-					destination="$argument"
-				else
-					fail_usage "Uso: eng setup <indirizzo o cartella> [cartella]"
-				fi
-				;;
-		esac
-	done
-	$dry && setup_args=(-n)
+	local source="$1" destination="${2:-}" staging directory setup_args=() status
+	[[ "$MODE" == dry ]] && setup_args+=(-n)
+	$VERBOSE && setup_args+=(-v)
+	$PLAIN && setup_args+=(--plain)
+	$NON_INTERACTIVE && setup_args+=(--non-interactive)
+	[[ -z "$REQUESTED_AGENTS" ]] || setup_args+=(--agents "$REQUESTED_AGENTS")
+	[[ -z "$REQUESTED_CLAUDE_MEMORY" ]] || setup_args+=(--claude-memory "$REQUESTED_CLAUDE_MEMORY")
 
 	if [[ -d "$source" ]]; then
 		[[ -z "$destination" ]] || fail_usage "La cartella di destinazione serve solo con un indirizzo Git"
@@ -181,8 +186,10 @@ attach_archive() {
 		directory="$(realpath -m -- "${destination:-$DEFAULT_ARCHIVE_DIR}")" || return 1
 		is_free_folder "$directory" || { say_fail "$(path "$directory") esiste e non è vuota: non la tocco"; return 1; }
 		check_saved_archive "$directory" || return 1
-		if $dry; then
+		if [[ "$MODE" == dry ]]; then
 			echo " ${CYAN}◇${RESET} clonerei $source in $(path "$directory") e salverei il percorso in $(path "$ARCHIVE_CONFIG_FILE")"
+			[[ -z "$REQUESTED_AGENTS" ]] || echo "   agenti richiesti: $REQUESTED_AGENTS"
+			[[ -z "$REQUESTED_CLAUDE_MEMORY" ]] || echo "   memoria di Claude richiesta: $REQUESTED_CLAUDE_MEMORY"
 			return 0
 		fi
 		load_ssh_agent
@@ -210,11 +217,19 @@ attach_archive() {
 		return 1
 	fi
 
-	if $dry; then
+	if [[ "$MODE" == dry ]]; then
 		echo " ${CYAN}◇${RESET} salverei $(path "$directory") in $(path "$ARCHIVE_CONFIG_FILE")"
 	else
-		remember_archive "$directory" || { say_fail "percorso non salvato in $(path "$ARCHIVE_CONFIG_FILE")"; return 1; }
+		if ! remember_archive "$directory"; then
+			say_fail "archivio disponibile in $(path "$directory"), percorso non salvato. Per collegarlo: $(shell_path "$PROGRAM_DIR/bin/sync.sh") setup $(shell_path "$directory")"
+			return 1
+		fi
 		say_done "percorso salvato in $(path "$ARCHIVE_CONFIG_FILE")"
 	fi
-	exec "$PROGRAM_DIR/bin/sync.sh" --data-dir "$directory" setup "${setup_args[@]}"
+	"$PROGRAM_DIR/bin/sync.sh" --data-dir "$directory" setup "${setup_args[@]}"
+	status=$?
+	if ((status == 1)) && [[ "$MODE" == run ]]; then
+		say_fail "archivio collegato, configurazione da completare. Riprova con: $(shell_path "$PROGRAM_DIR/bin/sync.sh") setup"
+	fi
+	return "$status"
 }

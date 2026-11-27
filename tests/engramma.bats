@@ -36,15 +36,21 @@ push_from_other_computer() {
 	grep -q "dall'altro computer" "$NOTES/docs/guida.md"
 }
 
-@test "check and dry run only report the commits to download" {
+@test "local check and dry run leave refs unchanged, refresh fetches without merging" {
 	push_from_other_computer "dall'altro computer"
-	local before
+	local before upstream
 	before="$(git -C "$ENGRAMMA_DIR" rev-parse HEAD)"
+	upstream="$(git -C "$ENGRAMMA_DIR" rev-parse '@{upstream}')"
 
 	run "$SYNC" check
-	[[ "$output" == *"1 commit sul remoto da scaricare"* ]]
+	[[ "$output" == *"controllo locale"* ]]
 	run "$SYNC" sync demo --dry-run
+	[[ "$output" == *"anteprima locale"* ]]
+	[ "$(git -C "$ENGRAMMA_DIR" rev-parse '@{upstream}')" = "$upstream" ]
+
+	run "$SYNC" check --refresh
 	[[ "$output" == *"1 commit sul remoto da scaricare"* ]]
+	[ "$(git -C "$ENGRAMMA_DIR" rev-parse '@{upstream}')" != "$upstream" ]
 	[ "$(git -C "$ENGRAMMA_DIR" rev-parse HEAD)" = "$before" ]
 }
 
@@ -186,13 +192,13 @@ complete_eng() {
 
 @test "save, new and add refuse options instead of storing them as data" {
 	run "$SYNC" save demo --dry-run
-	[ "$status" -eq 1 ]
-	[[ "$output" == *"non accetta opzioni"* ]]
+	[ "$status" -eq 2 ]
+	[[ "$output" == *"--dry-run vale solo"* ]]
 	run "$SYNC" new prova -n
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	[ ! -e "$ENGRAMMA_DIR/workspaces/prova" ]
 	run "$SYNC" add demo git@example.com:team/x.git -n
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	! grep -q -- "-n" "$NOTES/repos.txt"
 }
 
@@ -278,7 +284,7 @@ complete_eng() {
 	local name
 	for name in sync check global all help; do
 		run "$SYNC" new "$name"
-		[ "$status" -eq 1 ]
+		[ "$status" -eq 2 ]
 		[[ "$output" == *"riservato"* ]]
 		[ ! -e "$ENGRAMMA_DIR/workspaces/$name" ]
 	done
@@ -292,7 +298,7 @@ complete_eng() {
 	[[ "$output" != *"drift"* && "$output" != *"proiettato"* ]]
 
 	run "$SYNC" --session-start
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 }
 
 @test "log prints the log of the last run outside a terminal" {

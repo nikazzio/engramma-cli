@@ -66,22 +66,22 @@ EOF
 @test "new and add reject destinations that escape their workspace" {
 	for location in /elsewhere ../elsewhere team/../../elsewhere 'team folder'; do
 		run "$SYNC" new fresh "$location"
-		[ "$status" -eq 1 ]
+		[ "$status" -eq 2 ]
 		[ ! -e "$ENGRAMMA_DIR/workspaces/fresh" ]
 	done
 	run "$SYNC" add ../workspaces/demo git@example.com:team/extra.git
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	mkdir -p "$HOME/workspace" "$TEST_ROOT/elsewhere"
 	ln -s "$TEST_ROOT/elsewhere" "$HOME/workspace/outside"
 	run "$SYNC" new fresh outside/fresh
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	ln -s "$TEST_ROOT/elsewhere" "$ENGRAMMA_DIR/workspaces/outside"
 	run "$SYNC" add outside git@example.com:team/extra.git
 	[ "$status" -eq 1 ]
 	[ ! -e "$TEST_ROOT/elsewhere/repos.txt" ]
 	for url in git@example.com:team/.. git@example.com:team/ git@example.com:team/.; do
 		run "$SYNC" add demo "$url"
-		[ "$status" -eq 1 ]
+		[ "$status" -eq 2 ]
 	done
 }
 
@@ -96,4 +96,31 @@ EOF
 	[ "$status" -eq 1 ]
 	[ "$(grep -c '^one ' "$NOTES/repos.txt")" -eq 1 ]
 	[ "$(grep -c '^two ' "$NOTES/repos.txt")" -eq 1 ]
+}
+
+@test "failed workspace path update keeps the saved paths intact" {
+	mkdir -p "$XDG_CONFIG_HOME/engramma"
+	printf 'demo %s\n' "$WORKSPACE" >"$XDG_CONFIG_HOME/engramma/paths"
+	fail_publish "$XDG_CONFIG_HOME/engramma/paths"
+	run "$SYNC" sync demo --path "$HOME/new-demo"
+	[ "$status" -eq 1 ]
+	[[ "$output" == *"impossibile salvare"* ]]
+	[ "$(cat "$XDG_CONFIG_HOME/engramma/paths")" = "demo $WORKSPACE" ]
+	[ ! -e "$HOME/new-demo" ]
+}
+
+@test "failed detach all preserves the archive selection and eng command" {
+	unset ENGRAMMA_DIR
+	mkdir -p "$XDG_CONFIG_HOME/engramma"
+	git -C "${NOTES%/workspaces/demo}" init -q
+	printf '%s\n' "${NOTES%/workspaces/demo}" >"$XDG_CONFIG_HOME/engramma/archive"
+	"$SYNC" setup
+	mkdir -p "$WORKSPACE"
+	ln -s "$NOTES/docs" "$WORKSPACE/docs"
+	fail_publish "$WORKSPACE/docs"
+	run "$SYNC" detach all
+	[ "$status" -eq 1 ]
+	[ -f "$XDG_CONFIG_HOME/engramma/archive" ]
+	[ -L "$HOME/.local/bin/eng" ]
+	[ -L "$WORKSPACE/docs" ]
 }

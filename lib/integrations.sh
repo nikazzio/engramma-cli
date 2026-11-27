@@ -26,6 +26,7 @@ integration_part() {
 			;;
 		claude)
 			command -v claude >/dev/null || { echo none; return; }
+			agent_requirement_enabled claude || { echo none; return; }
 			local settings="$CLAUDE_HOME/settings.json"
 			case "$name" in
 				boost) grep -qs 'boost-hook-claude' "$settings" && echo ok || echo missing ;;
@@ -49,6 +50,7 @@ sys.exit(0 if enabled else 1)
 			;;
 		codex)
 			command -v codex >/dev/null || { echo none; return; }
+			agent_requirement_enabled codex || { echo none; return; }
 			case "$name" in
 				boost) [[ -f "$CODEX_HOME_DIR/BOOST.md" ]] && echo ok || echo missing ;;
 				caveman) [[ -d "$CODEX_HOME_DIR/caveman" ]] && echo ok || echo missing ;;

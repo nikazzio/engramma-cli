@@ -12,13 +12,13 @@ teardown() {
 
 @test "fails with an unknown workspace" {
 	run "$SYNC" sync sconosciuto
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	[[ "$output" == *"Workspace sconosciuto"* ]]
 }
 
 @test "fails with an unknown option" {
 	run "$SYNC" sync demo --boh
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	[[ "$output" == *"Opzione sconosciuta"* ]]
 }
 
@@ -233,11 +233,11 @@ teardown() {
 	printf '#!/bin/sh\necho "logged in as utente"\nexit 0\n' >"$TEST_ROOT/bin/ssh"
 	chmod +x "$TEST_ROOT/bin/ssh"
 	echo "remoto git@example.test:team/remoto.git" >>"$NOTES/repos.txt"
-	PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check demo
+	PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check demo --refresh
 	[[ "$output" == *"ssh example.test autenticato"* ]]
 
 	printf '#!/bin/sh\necho "Permission denied (publickey)." >&2\nexit 255\n' >"$TEST_ROOT/bin/ssh"
-	PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check demo
+	PATH="$TEST_ROOT/bin:$PATH" run "$SYNC" check demo --refresh
 	[[ "$output" == *"ssh example.test non autenticato"*"Permission denied"* ]]
 }
 
@@ -496,7 +496,7 @@ EOF
 
 @test "fails when an option has no value" {
 	run "$SYNC" sync demo --path
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	[[ "$output" == *"Manca la cartella dopo --path"* ]]
 }
 
@@ -727,16 +727,16 @@ setup_full_workspace() {
 
 @test "detach refuses --check" {
 	run "$SYNC" detach --check demo
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 }
 
 @test "detach-all refuses a workspace name, --path or --skip" {
 	run "$SYNC" detach all --path "$HOME/altrove"
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	run "$SYNC" detach all demo
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	run "$SYNC" detach all --skip alpha
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 }
 
 @test "detach-all uses the folder saved for each workspace" {
@@ -793,12 +793,12 @@ setup_full_workspace() {
 
 @test "rejects the old options with a pointer to the help" {
 	run "$SYNC" --global
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	[[ "$output" == *"Opzione sconosciuta: --global"* ]]
 	[[ "$output" == *"eng --help"* ]]
 
 	run "$SYNC" check demo --dry-run
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 }
 
 @test "links the workspace AGENTS.md and warns about instructions too big for Codex" {
@@ -894,12 +894,12 @@ stable_output() {
 
 @test "--jobs wants a number, and --jobs and --prune work only with sync" {
 	run "$SYNC" sync demo -j
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	[[ "$output" == *"Manca il numero dopo -j"* ]]
 	run "$SYNC" sync demo --jobs tre
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	run "$SYNC" setup --prune
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	[[ "$output" == *"--jobs e --prune valgono solo con sync"* ]]
 }
 
@@ -917,7 +917,7 @@ stable_output() {
 	[ "$(grep -c 'percorso assoluto\|una sola /' <<<"${output%%────*}")" -eq 3 ]
 }
 
-@test "a branch removed on origin with commits never pushed is only listed, --prune deletes it" {
+@test "a branch removed on origin with commits never pushed is preserved even with --prune" {
 	"$SYNC" sync demo >/dev/null
 	git -C "$WORKSPACE/alpha" switch --quiet -c feat/locale
 	git -C "$WORKSPACE/alpha" push --quiet -u origin feat/locale
@@ -928,13 +928,12 @@ stable_output() {
 	run "$SYNC" sync demo
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"alpha lasciati feat/locale: commit non presenti sul remoto"* ]]
-	[[ "$output" == *"eng sync demo --prune: cancella senza chiedere i branch locali mergiati o rimossi dal remoto, anche quelli con commit solo locali"* ]]
 	git -C "$WORKSPACE/alpha" rev-parse --verify --quiet refs/heads/feat/locale
 
 	run "$SYNC" sync demo --prune
 	[ "$status" -eq 0 ]
-	[[ "$output" == *"alpha: branch locale feat/locale eliminato"* ]]
-	! git -C "$WORKSPACE/alpha" rev-parse --verify --quiet refs/heads/feat/locale
+	[[ "$output" == *"alpha lasciati feat/locale: commit non presenti sul remoto"* ]]
+	git -C "$WORKSPACE/alpha" rev-parse --verify --quiet refs/heads/feat/locale
 }
 
 @test "list shows the workspaces with their folder and repos, changing nothing" {
@@ -984,4 +983,15 @@ stable_output() {
 	[ "$status" -eq 0 ]
 	[ ! -L "$WORKSPACE/beta/.agents/skills/layout" ]
 	[ "$(cat "$WORKSPACE/beta/.agents/skills/layout/SKILL.md")" = Layout ]
+}
+
+@test "dry run leaves existing repo refs untouched even if origin has changed" {
+	"$SYNC" sync demo >/dev/null
+	local before
+	before="$(git -C "$WORKSPACE/alpha" rev-parse origin/develop)"
+	push_to_remote alpha develop "nuovo commit"
+	run "$SYNC" sync demo --dry-run
+	[ "$status" -eq 0 ]
+	[[ "$output" == *"git fetch origin per controllare gli aggiornamenti"* ]]
+	[ "$(git -C "$WORKSPACE/alpha" rev-parse origin/develop)" = "$before" ]
 }

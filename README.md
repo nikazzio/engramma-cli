@@ -1,6 +1,6 @@
 # Engramma
 
-Engramma tiene le regole, gli appunti, la memoria e la configurazione degli agenti di sviluppo (Claude Code e Codex) in un **archivio Git privato**, e li collega ai tuoi progetti su ogni computer.
+Engramma tiene regole, appunti, skill e configurazione per Claude Code, Codex e GitHub Copilot CLI in un **archivio Git privato**. Collega questi dati ai tuoi progetti su ogni computer e può sincronizzare la memoria locale di Claude Code.
 
 ```mermaid
 flowchart LR
@@ -12,20 +12,16 @@ flowchart LR
 
 ## Requisiti
 
-Linux o WSL, Bash 5+, Python 3.10+, Git, OpenSSH e [mise](https://mise.jdx.dev), che installa i programmi di ogni progetto. Se mise manca, `eng setup` propone di installarlo.
+Linux o WSL, Bash 5+, Python 3.10+, Git, OpenSSH, `flock` (util-linux) e [mise](https://mise.jdx.dev), che installa i programmi di ogni progetto. Se mise manca, `eng setup` propone di installarlo.
 
 ## Installazione
 
 ```bash
-git clone git@github.com:nikazzio/engramma-cli.git ~/engramma     # il programma
-~/engramma/bin/sync.sh init                                       # archivio nuovo in ~/engramma-dati
-~/engramma/bin/sync.sh setup git@github.com:ACCOUNT/ARCHIVIO-PRIVATO.git  # oppure: archivio esistente
-~/engramma/bin/sync.sh setup -n                                   # mostra cosa cambierebbe
-~/engramma/bin/sync.sh setup                                      # collega eng e la configurazione
+git clone git@github.com:nikazzio/engramma-cli.git ~/engramma
+~/engramma/bin/sync.sh setup --wizard
 ```
 
-> [!WARNING]
-> `setup` cambia la configurazione del computer: `~/.claude/CLAUDE.md`, le impostazioni di Claude Code e di Codex, i plugin. Controlla l’anteprima con `setup -n`. Per un file locale diverso da quello da collegare, Engramma ti chiede quale copia conservare.
+La guida ti fa scegliere l’archivio e gli agenti, mostra l’anteprima e chiede conferma. Per eseguire il setup in uno script usa `--non-interactive` e indica le scelte come opzioni.
 
 [Primi passi](docs/getting-started.md) spiega ogni passaggio, compreso il repository privato.
 
@@ -33,11 +29,12 @@ git clone git@github.com:nikazzio/engramma-cli.git ~/engramma     # il programma
 
 | Comando | Cosa fa |
 |---|---|
-| `eng` | Controlla il computer e i workspace, senza cambiare niente |
+| `eng` | Controlla lo stato locale del computer e dei workspace |
 | `eng sync <ws>` | Scarica l'archivio, aggiorna i repo del workspace, salva e invia note e memoria |
 | `eng save <ws>` | Salva e invia subito un workspace, senza toccare i repo |
 | `eng sync global` / `eng save global` | Lo stesso per la configurazione del computer |
 | `eng tools` | Programmi installati e mancanti; `eng tools install` li installa con mise |
+| `eng agents` | Agenti selezionati e stato della memoria |
 | `eng integrations` | Integrazioni degli agenti attive (boost, caveman, code-review-graph, repomix) |
 
 Elenco completo in [Comandi](docs/commands.md).

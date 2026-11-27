@@ -66,8 +66,7 @@ stale_branches_of() {
 # contained in a branch of origin. A branch removed on origin after a squash
 # merge can still hold commits never pushed.
 is_branch_pushed() {
-	is_merged_into "$1" "$2" "$3" ||
-		[[ -n "$(git -C "$1" for-each-ref --count=1 --contains "refs/heads/$2" refs/remotes/)" ]]
+	[[ -n "$(git -C "$1" for-each-ref --count=1 --contains "refs/heads/$2" refs/remotes/origin/)" ]]
 }
 
 # Lists the branches already merged or removed on origin, with the date and the
@@ -81,7 +80,7 @@ list_stale_branches() {
 	info "branch locali mergiati in $default_branch o rimossi dal remoto:"
 	while read -r branch; do
 		where=pushed note=""
-		if ! is_branch_pushed "$repo" "$branch" "$default_branch"; then
+		if ! is_branch_pushed "$repo" "$branch"; then
 			where=local note=" ${YELLOW}· commit non presenti sul remoto${RESET}"
 		fi
 		JOB_STALE+="$branch $where"$'\n'
@@ -184,6 +183,12 @@ update_repo() {
 	local repo="$1" branch="$2"
 	check_git_lock "$repo"
 
+	if [[ "$MODE" == dry ]]; then
+		would "git fetch origin per controllare gli aggiornamenti"
+		align_repo "$repo" "$branch"
+		return
+	fi
+
 	if ! ssh_url_authenticated "$(git -C "$repo" remote get-url origin 2>/dev/null)"; then
 		repo_problem err "fetch saltato: SSH verso origin non autenticato"
 		return
@@ -260,7 +265,10 @@ wait_for_file() {
 }
 
 link_repo_personal_files() {
-	ensure_repo_note "$1" "$2"
+	if agent_enabled claude; then ensure_repo_note "$1" "$2"; fi
+	if agent_enabled copilot || { $EXPLICIT_AGENTS && agent_enabled codex; }; then
+		link_shared_repo_context "$1" "$2"
+	fi
 	ensure_repo_files "$1" "$2"
 	ensure_repo_excludes "$1" "$2"
 	check_codex_repo_instructions "$1" "$2"
@@ -383,18 +391,11 @@ repo_job() {
 		update_repo "$dir/$name" "$branch"
 	fi
 	{
-		printf 'JOB_STATUS=%q JOB_MESSAGE=%q JOB_LEVEL=%q JOB_SECONDS=%q\n' \
-			"$REPO_STATUS" "$REPO_MESSAGE" "$REPO_LEVEL" $((SECONDS - started - JOB_WAITED))
-		printf 'JOB_PROBLEMS=%q JOB_ISSUES=%q JOB_WARNINGS=%q JOB_FINE=%q JOB_STALE=%q\n' \
-			"$PROBLEM_COUNT" "$BLOCK_ISSUES" "$BLOCK_WARNINGS" "$BLOCK_FINE" "$JOB_STALE"
-		printf 'JOB_LINES=('
-		((${#REPO_LINES[@]})) && printf '%q ' "${REPO_LINES[@]}"
-		printf ')\n'
-		printf 'JOB_NOTES=('
-		((${#NOTES[@]})) && printf '%q ' "${NOTES[@]}"
-		printf ')\n'
-	} >"$JOB_ID.result"
-	touch "$JOB_ID.done"
+		printf '%s\0' "$REPO_STATUS" "$REPO_MESSAGE" "$REPO_LEVEL" "$((SECONDS - started - JOB_WAITED))" \
+			"$PROBLEM_COUNT" "$BLOCK_ISSUES" "$BLOCK_WARNINGS" "$BLOCK_FINE" "$JOB_STALE" "${#REPO_LINES[@]}"
+		if ((${#REPO_LINES[@]})); then printf '%s\0' "${REPO_LINES[@]}"; fi
+		if ((${#NOTES[@]})); then printf '%s\0' "${NOTES[@]}"; fi
+	} >"$JOB_ID.result" && touch "$JOB_ID.done"
 }
 
 # Ctrl+C does not reach the jobs (a command started with & in a script ignores
@@ -431,28 +432,39 @@ collect_repo_job() {
 		return
 	fi
 
-	local JOB_STATUS JOB_MESSAGE JOB_LEVEL JOB_SECONDS JOB_PROBLEMS JOB_ISSUES JOB_WARNINGS JOB_FINE JOB_STALE JOB_LINES=() JOB_NOTES=()
-	# shellcheck source=/dev/null # written by repo_job
-	source "$id.result"
-	REPO_STATUS="$JOB_STATUS" REPO_MESSAGE="$JOB_MESSAGE"
-	REPO_LINES+=("${JOB_LINES[@]}")
-	# shellcheck disable=SC2034 # read by fix_with in lib/ui.sh
-	((${#JOB_NOTES[@]})) && NOTES+=("${JOB_NOTES[@]}") && LAST_NOTE=$((${#NOTES[@]} - 1))
-	raise_level "$JOB_LEVEL"
-	PROBLEM_COUNT=$((PROBLEM_COUNT + JOB_PROBLEMS))
-	BLOCK_ISSUES=$((BLOCK_ISSUES + JOB_ISSUES))
-	BLOCK_WARNINGS=$((BLOCK_WARNINGS + JOB_WARNINGS))
-	BLOCK_FINE=$((BLOCK_FINE + JOB_FINE))
+	local result=() line_count counts
+	mapfile -d '' -t result <"$id.result"
+	line_count="${result[9]:-}"
+	counts="${result[*]:2:6} $line_count"
+	if [[ ! -e "$id.done" || ! "${result[2]:-}" =~ ^[0-5]$ || ! "$counts" =~ ^(0|[1-9][0-9]*)(\ (0|[1-9][0-9]*)){6}$ ]] ||
+		((${#result[@]} < 10 + line_count)); then
+		repo_problem err "risultato incompleto"
+		FAILED_REPOS+=("$WORKSPACE_NAME/$name")
+		return
+	fi
+	local job_status="${result[0]}" job_level="${result[2]}" job_seconds="${result[3]}"
+	REPO_STATUS="$job_status" REPO_MESSAGE="${result[1]}"
+	REPO_LINES+=("${result[@]:10:line_count}")
+	if ((${#result[@]} > 10 + line_count)); then
+		NOTES+=("${result[@]:10+line_count}")
+		# shellcheck disable=SC2034 # read by fix_with in lib/ui.sh
+		LAST_NOTE=$(("${#NOTES[@]}" - 1))
+	fi
+	raise_level "$job_level"
+	PROBLEM_COUNT=$((PROBLEM_COUNT + result[4]))
+	BLOCK_ISSUES=$((BLOCK_ISSUES + result[5]))
+	BLOCK_WARNINGS=$((BLOCK_WARNINGS + result[6]))
+	BLOCK_FINE=$((BLOCK_FINE + result[7]))
 
 	local elapsed
-	elapsed_label elapsed "$JOB_SECONDS"
-	((JOB_SECONDS > SLOW_REPO_SECONDS)) && SLOW_REPOS+=("$WORKSPACE_NAME/$name $elapsed")
-	[[ "$JOB_STATUS" == err ]] && FAILED_REPOS+=("$WORKSPACE_NAME/$name")
+	elapsed_label elapsed "$job_seconds"
+	((job_seconds > SLOW_REPO_SECONDS)) && SLOW_REPOS+=("$WORKSPACE_NAME/$name $elapsed")
+	[[ "$job_status" == err ]] && FAILED_REPOS+=("$WORKSPACE_NAME/$name")
 	while read -r branch where; do
 		[[ -n "$branch" ]] || continue
 		STALE_BRANCHES+=("$name $branch")
 		[[ "$where" == local ]] && UNPUSHED_BRANCHES+=("$name $branch")
-	done <<<"$JOB_STALE"
+	done <<<"${result[8]}"
 }
 
 # The repos of the workspace with their jobs: first the links of the repos already
@@ -519,7 +531,7 @@ check_repos() {
 # One question for the branches already merged of every repo of the workspace:
 # all, none, or repo by repo. A branch whose commits are not on the remote (never
 # pushed, or merged with a squash: engramma cannot tell) is left out of the
-# question and only listed. --prune deletes all of them without asking.
+# question and only listed. --prune skips the question for the safe candidates.
 prune_stale_branches() {
 	((${#STALE_BRANCHES[@]})) && [[ "$MODE" == run ]] || return 0
 	local entry name branch repos=() candidates=() chosen=() kept=""
@@ -534,15 +546,15 @@ prune_stale_branches() {
 	done
 	close_repos
 	section "branch mergiati o rimossi dal remoto"
+	report_unpushed_branches "$kept"
+	((${#candidates[@]})) || return 0
 	if $PRUNE; then
-		chosen=("${STALE_BRANCHES[@]}")
-	elif report_unpushed_branches "$kept" && ((${#candidates[@]} == 0)); then
-		return 0
+		chosen=("${candidates[@]}")
 	elif ! $IS_INTERACTIVE; then
 		if ((${#candidates[@]} == 1)); then
-			info "1 branch lasciato: eng sync $WORKSPACE_NAME --prune lo cancella ${DIM}(cancella anche quelli con commit solo locali)${RESET}"
+			info "1 branch lasciato: eng sync $WORKSPACE_NAME --prune lo cancella"
 		else
-			info "${#candidates[@]} branch lasciati: eng sync $WORKSPACE_NAME --prune li cancella ${DIM}(cancella anche quelli con commit solo locali)${RESET}"
+			info "${#candidates[@]} branch lasciati: eng sync $WORKSPACE_NAME --prune li cancella"
 		fi
 		return 0
 	else
@@ -570,7 +582,9 @@ prune_stale_branches() {
 	fi
 	for entry in "${chosen[@]}"; do
 		name="${entry%% *}" branch="${entry#* }"
-		if git -C "$WORKSPACE_DIR/$name" branch -D "$branch" >/dev/null 2>&1; then
+		if ! is_branch_pushed "$WORKSPACE_DIR/$name" "$branch"; then
+			warn "$name: branch $branch lasciato, i commit non risultano sul remoto"
+		elif git -C "$WORKSPACE_DIR/$name" branch -D "$branch" >/dev/null 2>&1; then
 			ok "${TEXT}$name${RESET}: branch locale ${REF}$branch${RESET} eliminato"
 		else
 			warn "${TEXT}$name${RESET} git branch -D $branch fallito ${DIM}(checkout in un altro worktree?)${RESET}"
@@ -578,11 +592,9 @@ prune_stale_branches() {
 	done
 }
 
-# The branches with commits that are not on the remote, one line per repo, and
-# --prune among the next steps.
+# One line per repo for branches whose commits are not on the remote.
 report_unpushed_branches() {
 	[[ -n "$1" ]] || return 0
-	next_step 50 "${CMD}eng sync $WORKSPACE_NAME --prune${RESET}: cancella senza chiedere i branch locali mergiati o rimossi dal remoto, anche quelli con commit solo locali"
 	local name branch names=() branches
 	while read -r name _; do
 		[[ -n "$name" && " ${names[*]} " != *" $name "* ]] && names+=("$name")

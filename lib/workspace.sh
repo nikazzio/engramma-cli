@@ -82,17 +82,27 @@ remember_workspace_path() {
 	case "$MODE" in
 		dry) would "salverei $(path "$WORKSPACE_DIR") in $(path "$PATHS_FILE")" ;;
 		*)
-			local others=""
-			mkdir -p "$(dirname "$PATHS_FILE")"
-			[[ -f "$PATHS_FILE" ]] && others="$(awk -v name="$WORKSPACE_NAME" '$1 != name' "$PATHS_FILE")"
-			{
-				[[ -n "$others" ]] && echo "$others"
-				echo "$WORKSPACE_NAME $WORKSPACE_DIR"
-			} >"$PATHS_FILE"
-			ok "$(path "$WORKSPACE_DIR") salvata in $(path "$PATHS_FILE")"
+			if save_workspace_path; then
+				ok "$(path "$WORKSPACE_DIR") salvata in $(path "$PATHS_FILE")"
+			else
+				problem "impossibile salvare $(path "$WORKSPACE_DIR") in $(path "$PATHS_FILE")"
+				return 1
+			fi
 			;;
 	esac
 }
+
+save_workspace_path() (
+	local staging
+	lock_config || return 1
+	staging="$(mktemp -- "$PATHS_FILE.XXXXXXXX")" || return 1
+	trap 'rm -f -- "$staging"' EXIT
+	if [[ -e "$PATHS_FILE" ]]; then
+		awk -v name="$WORKSPACE_NAME" '$1 != name' "$PATHS_FILE" >"$staging" || return 1
+	fi
+	printf '%s %s\n' "$WORKSPACE_NAME" "$WORKSPACE_DIR" >>"$staging" &&
+		mv -T -- "$staging" "$PATHS_FILE"
+)
 
 claude_project_key() {
 	printf '%s' "$1" | sed 's#[^A-Za-z0-9]#-#g'

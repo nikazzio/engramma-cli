@@ -62,7 +62,7 @@ teardown() {
 	run "$SYNC" tools global
 	[[ "$output" == *"jq"* && "$output" != *"php"* ]]
 	run "$SYNC" tools nessuno
-	[ "$status" -eq 1 ]
+	[ "$status" -eq 2 ]
 	[[ "$output" == *"Workspace sconosciuto"* ]]
 }
 

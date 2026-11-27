@@ -30,9 +30,9 @@ eng detach all      # ogni collegamento diventa una copia indipendente
 
 Quando `detach all` termina con successo, i progetti su questo computer usano copie locali di note e memoria. Puoi conservare l’archivio per usarlo su altri computer. Se compare un errore, conserva l’archivio e controlla il percorso indicato. `eng detach <ws>` scollega un solo workspace e `eng detach global` scollega la configurazione del computer.
 
-`detach all` toglie anche i comandi `eng` ed `engramma` e i completamenti. Non toglie i repo clonati, i plugin installati, le voci aggiunte alla configurazione di Codex, lo stato in `~/.local/state/engramma` e la configurazione in `~/.config/engramma`.
+`detach all` toglie anche i comandi `eng` ed `engramma` e i completamenti. Dimentica anche il percorso dell’archivio scelto dopo uno scollegamento riuscito. I repo clonati, i plugin installati, le voci aggiunte a Codex, i log e i backup restano disponibili.
 
-Per ricollegare tutto dopo `detach all`, riporta nell’archivio le modifiche fatte alle copie locali. Esegui `~/engramma/bin/sync.sh setup` per ripristinare il comando, poi `eng sync` per ricollegare i workspace presenti.
+Per ricollegare tutto dopo `detach all`, riporta nell’archivio le modifiche fatte alle copie locali. Esegui `~/engramma/bin/sync.sh setup ~/engramma-dati` per collegare di nuovo l’archivio e ripristinare il comando, poi `eng sync` per ricollegare i workspace presenti.
 
 ## Come aggiorno il programma?
 

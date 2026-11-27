@@ -59,10 +59,15 @@ pull_engramma() {
 		return 0
 	fi
 
-	local behind
+	local behind previous
 	behind="$(engramma_count 'HEAD..@{upstream}')"
 	((behind)) || return 0
-	engramma_git merge --ff-only --quiet '@{upstream}' 2>/dev/null || return 0
+	previous="$(engramma_git rev-parse HEAD)" || return 0
+	if ! engramma_git merge --ff-only --quiet '@{upstream}' 2>/dev/null; then
+		memory_git_changes ricezione bloccati "aggiornamento remoto non applicato" "$previous...@{upstream}" || true
+		return 0
+	fi
+	memory_git_changes ricezione ricevuti "" "$previous" HEAD || true
 
 	stop_activity
 	put " engramma: fast-forward di $behind commit da $(engramma_git rev-parse --abbrev-ref '@{upstream}')$BADGE_MARK${BADGES[ok]}"
@@ -85,8 +90,10 @@ report_engramma_updates() {
 		ok "fast-forward di $ENGRAMMA_UPDATED commit da upstream"
 		return
 	fi
-	activity "engramma › git fetch"
-	[[ -n "$ENGRAMMA_FETCH" ]] || { fetch_engramma && ENGRAMMA_FETCH=ok || ENGRAMMA_FETCH=failed; }
+	if [[ -z "$ENGRAMMA_FETCH" ]] && $NETWORK_CHECKS; then
+		activity "engramma › git fetch"
+		if fetch_engramma; then ENGRAMMA_FETCH=ok; else ENGRAMMA_FETCH=failed; fi
+	fi
 	if [[ "$ENGRAMMA_FETCH" == failed ]]; then
 		warn "git fetch fallito: impossibile verificare gli aggiornamenti di engramma; uso la copia locale ${DIM}(controlla rete e chiave SSH)${RESET}"
 		return
@@ -95,18 +102,23 @@ report_engramma_updates() {
 	local behind ahead
 	behind="$(engramma_count 'HEAD..@{upstream}')"
 	ahead="$(engramma_count '@{upstream}..HEAD')"
+	local remote_label="sul remoto" suffix=""
+	if [[ "$ENGRAMMA_FETCH" != ok ]]; then
+		remote_label="nel riferimento Git locale"
+		suffix=" · ultimo stato noto"
+	fi
 	if ((behind && ahead)); then
-		problem "engramma: $ahead commit solo su questo computer e $behind solo sul remoto; serve un rebase"
+		problem "engramma: $ahead commit solo su questo computer e $behind solo $remote_label; serve un rebase$suffix"
 		fix_with 5 "${CMD}git -C $(tilde "$ENGRAMMA_DIR") pull --rebase && git -C $(tilde "$ENGRAMMA_DIR") push${RESET}"
 	elif ((behind)); then
 		if [[ "$MODE" == run ]]; then
 			warn "engramma: $behind commit sul remoto non applicati; git non ha potuto aggiornare la copia locale"
 		else
-			warn "engramma: $behind commit sul remoto da scaricare ${DIM}(eng sync aggiorna la copia locale)${RESET}"
+			warn "engramma: $behind commit $remote_label da scaricare ${DIM}(eng sync aggiorna la copia locale$suffix)${RESET}"
 		fi
 		next_step 5 "${CMD}git -C $(tilde "$ENGRAMMA_DIR") pull${RESET}"
 	else
-		fine "allineato a upstream"
+		fine "allineato al riferimento remoto$suffix"
 	fi
 }
 
@@ -214,6 +226,7 @@ session_merge_report() {
 	while read -r source destination how _; do
 		[[ "$how" == unisci && -f "$GLOBAL_DIR/$source" ]] || continue
 		destination="$(expand_global_destination "$destination")" || continue
+		global_link_enabled "$source" "$destination" || continue
 		[[ -L "$destination" ]] && continue
 		while IFS=$'\t' read -r kind path _; do
 			case "$kind" in

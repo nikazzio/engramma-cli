@@ -23,23 +23,39 @@ _eng() {
 			mapfile -t COMPREPLY < <(compgen -d -- "$current")
 			return 0
 			;;
+		--agents)
+			local prefix="" agent
+			[[ "$current" != *,* ]] || prefix="${current%,*},"
+			local choices=(claude codex copilot)
+			[[ -n "$prefix" ]] || choices+=(none)
+			for agent in "${choices[@]}"; do
+				[[ ",$prefix" == *",$agent,"* ]] && continue
+				[[ "$prefix$agent" == "$current"* ]] && COMPREPLY+=("$prefix$agent")
+			done
+			return 0
+			;;
+		--claude-memory)
+			mapfile -t COMPREPLY < <(compgen -W 'on off' -- "$current")
+			return 0
+			;;
 		-j | --jobs) return 0 ;;
 	esac
 	if [[ "$current" == -* ]]; then
-		words="--version"
+		words="--version --plain --non-interactive -h --help"
 		if ((COMP_CWORD == offset)); then
-			words+=" -h --help"
+			words+=" -v --verbose --refresh"
 			((offset == 1)) && words+=" --data-dir"
 		else
 			case "${COMP_WORDS[offset]}" in
 				sync) words+=" -v --verbose -n --dry-run --path -j --jobs --prune" ;;
-				setup | detach) words+=" -v --verbose -n --dry-run" ;;
+				setup) words+=" -v --verbose -n --dry-run --wizard --agents --claude-memory" ;;
+				detach) words+=" -v --verbose -n --dry-run" ;;
 				init) words+=" -n --dry-run" ;;
-				check) words+=" -v --verbose" ;;
+				check | global) words+=" -v --verbose --refresh" ;;
 			esac
 		fi
 	elif ((COMP_CWORD == offset)); then
-		words="check sync setup init detach list tools integrations save new add log help global $workspaces"
+		words="check sync setup init detach list tools integrations agents save new add log help global $workspaces"
 	elif [[ "${COMP_WORDS[offset]}" == detach ]]; then
 		words="all global $workspaces"
 	elif [[ "${COMP_WORDS[offset]}" == tools ]]; then
@@ -50,7 +66,7 @@ _eng() {
 	elif [[ "${COMP_WORDS[offset]}" =~ ^(init|setup)$ ]]; then
 		mapfile -t COMPREPLY < <(compgen -d -- "$current")
 		return 0
-	elif [[ "${COMP_WORDS[offset]}" =~ ^(new|log|integrations|help)$ ]] || { [[ "${COMP_WORDS[offset]}" == add ]] && ((COMP_CWORD > offset + 1)); }; then
+	elif [[ "${COMP_WORDS[offset]}" =~ ^(new|log|integrations|agents|help)$ ]] || { [[ "${COMP_WORDS[offset]}" == add ]] && ((COMP_CWORD > offset + 1)); }; then
 		return 0
 	else
 		words="$workspaces"

@@ -1,4 +1,18 @@
-# Agenti: Claude Code e Codex
+# Claude Code, Codex e Copilot CLI
+
+## Scegli gli agenti per questa postazione
+
+```bash
+eng setup --agents codex,copilot --dry-run
+eng setup --agents codex,copilot
+eng agents
+```
+
+L’elenco sostituisce la scelta precedente. Puoi usare un solo agente o `none`. La scelta vale per l’archivio selezionato su questo computer. I nuovi archivi partono senza agenti e con la memoria disattivata. Gli archivi precedenti conservano le impostazioni esistenti finché chiedi di cambiarle.
+
+Per usare Claude e sincronizzarne la memoria, esegui `eng setup --agents claude --claude-memory on`. Per fermare la sincronizzazione, usa `eng setup --claude-memory off`. Engramma sostituisce i collegamenti alla memoria con copie locali indipendenti e lascia nell’archivio i ricordi già salvati. Le nuove modifiche alla memoria restano fuori dai commit di `eng sync` ed `eng save` su questo computer. L’archivio Git conserva la memoria già inclusa nei commit. Su una postazione con la memoria disattivata, quei file restano nell’archivio senza essere collegati a Claude.
+
+Disattivando un agente, i suoi collegamenti gestiti diventano copie locali. Le regole e le skill condivise nel repo restano disponibili agli agenti che le leggono. Le impostazioni già scritte in locale restano sul computer.
 
 ## Regole e memoria: chi legge cosa
 
@@ -10,12 +24,11 @@ Ogni regola sta in un solo livello. I livelli più specifici aggiungono o restri
 | Workspace | regole del cliente | `workspaces/<ws>/AGENTS.md` | importato da `<ws>/.claude/CLAUDE.md` | letto se avviato nella cartella del workspace |
 | Repo, del team | istruzioni committate nel repo | — | `CLAUDE.md` del repo | `AGENTS.md` o `CLAUDE.md` del repo |
 | Repo, tue | note personali su un repo | `repo-notes/<repo>.md` | `CLAUDE.local.md`, che le importa | per istruzione (vedi [Codex](#codex)) |
-| Memoria | quello che Claude impara lavorando | `memory/` | memoria automatica | — |
+| Memoria | quello che Claude impara lavorando | `memory/` | memoria automatica, con sincronizzazione abilitata | — |
 
 Avvia l'agente nella cartella del workspace per lavorare su più repo, o dentro un repo per lavorare solo su quello.
 
-> [!TIP]
-> Claude Code non modifica un file raggiunto tramite collegamento. Per cambiare `AGENTS.md` o un file di `repo-files/` con Claude, indicagli il file nell'archivio. Le note di `repo-notes/` passano per questo da un `CLAUDE.local.md` che le importa.
+> **Suggerimento.** Claude Code non modifica un file raggiunto tramite collegamento. Per cambiare `AGENTS.md` o un file di `repo-files/` con Claude, indicagli il file nell'archivio. Le note di `repo-notes/` passano per questo da un `CLAUDE.local.md` che le importa.
 
 ## Cosa legge Claude Code all'avvio
 
@@ -54,8 +67,7 @@ cd <ws>/<repo> && claude
 
 `<` indica la precedenza: a parità di impostazione vale quella più a destra. Le liste, come i permessi, si sommano ([documentazione](https://code.claude.com/docs/en/settings)).
 
-> [!NOTE]
-> Due punti che la documentazione di Claude Code non chiarisce. Primo: se, avviato dentro un repo, Claude legge anche `<ws>/.claude/CLAUDE.md`, cioè le regole del workspace. Secondo: se legge le skill in `<repo>/.agents/skills/`, dove engramma collega le skill di un repo. Codex le legge.
+> **Nota.** Due punti che la documentazione di Claude Code non chiarisce. Primo: se, avviato dentro un repo, Claude legge anche `<ws>/.claude/CLAUDE.md`, cioè le regole del workspace. Secondo: se legge le skill in `<repo>/.agents/skills/`, dove engramma collega le skill di un repo. Codex le legge.
 
 ## Skill
 
@@ -87,9 +99,9 @@ Quelli del workspace e del repo li installa Claude Code all'avvio. Un marketplac
 
 ## Codex
 
-Se `codex` è in `global/requires.txt` ed è installato, `eng setup` prepara Codex:
+Se selezioni Codex ed è installato, `eng setup` prepara la postazione. Per gli archivi precedenti vale anche la dichiarazione di Codex in `global/requires.txt`:
 
-- scrive `~/.codex/AGENTS.md` dalle regole generali. Codex non segue gli `@import`, quindi le regole vengono copiate per intero. Si aggiunge la regola "leggi le istruzioni del repo in cui lavori, `CLAUDE.local.md` compreso". Succede solo se `links.txt` collega un file a `${CLAUDE_HOME}/CLAUDE.md`. Un `AGENTS.md` scritto a mano non viene mai toccato;
+- scrive `~/.codex/AGENTS.md` dalle regole generali. Codex non segue gli `@import`, quindi le regole vengono copiate per intero. Con una scelta esplicita le regole arrivano da `global/AGENTS.md` oppure dalle regole globali di Claude già dichiarate nell’archivio. Codex riceve anche l’indicazione di leggere le regole del workspace e la nota personale locale del repo. Gli archivi precedenti usano la sorgente già dichiarata e mantengono il riferimento a `CLAUDE.local.md`. Un `AGENTS.md` scritto a mano non viene mai toccato;
 - collega le skill generali anche in `~/.agents/skills`;
 - imposta `project_doc_fallback_filenames = ["CLAUDE.md"]`, così Codex legge i `CLAUDE.md` dei repo senza `AGENTS.md`;
 - spegne `shell_snapshot`, così Codex usa la versione di node di ogni cartella;
@@ -103,6 +115,14 @@ path   <percorso>            # comando per installarlo     controllato, con il c
 ```
 
 Codex legge al massimo 32 KB di istruzioni: `eng` avvisa quando le regole generali, del workspace o del team superano il limite. La configurazione di Codex contiene anche dati del computer (cartelle fidate, hook approvati): engramma aggiunge solo le voci elencate sopra.
+
+## Copilot CLI
+
+Quando selezioni Copilot, Engramma prepara le istruzioni personali da `global/AGENTS.md` o dalle regole generali già presenti nell’archivio. Se hai scritto a mano le istruzioni di Copilot, il setup ti segnala il conflitto e conserva il tuo file. Le skill generali sono collegate nella cartella personale di Copilot. Le istruzioni e le skill già versionate dal team restano in uso.
+
+Nel repo, le istruzioni personali gestite chiedono a Copilot di consultare le regole del workspace e la nota del repo. Questi due riferimenti sono esclusi dal Git del progetto. Una sessione nuova carica le istruzioni personali aggiornate. [Istruzioni di Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-custom-instructions) · [Skill di Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills)
+
+Copilot Memory resta gestita da GitHub per account e repository. Per vederne lo stato in una sessione interattiva usa `/memory`. [Memoria di Copilot](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/copilot-memory/manage-for-yourself)
 
 ## Integrazioni
 

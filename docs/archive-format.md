@@ -8,7 +8,7 @@ archivio/
 │   └── <ws>/                 un workspace (vedi sotto)
 ├── global/                   configurazione del computer (vedi sotto)
 ├── skills/
-│   └── <skill>/SKILL.md      skill generali, per Claude Code e Codex
+│   └── <skill>/SKILL.md      skill generali per gli agenti selezionati
 └── skills-ignore.txt         skill installate da altri strumenti, da non segnalare
 ```
 
@@ -24,7 +24,7 @@ archivio/
 |---|---|---|---|
 | `repos.txt` | sì | `<cartella> <url git> [branch principale]` | ogni repo clonato in `<cartella del ws>/<cartella>` |
 | `location.txt` | no | cartella sotto `~/workspace`, per esempio `clienti/acme` | cartella del workspace |
-| `AGENTS.md` | no | regole del workspace per Claude Code e Codex | collegato in `<ws>/AGENTS.md` |
+| `AGENTS.md` | no | regole del workspace per gli agenti selezionati | collegato in `<ws>/AGENTS.md` |
 | `.claude/` | no | `CLAUDE.md` (di solito solo `@../AGENTS.md`), `settings.json` | collegata in `<ws>/.claude` |
 | `docs/` | no | appunti del workspace | collegata in `<ws>/docs` |
 | `mise.toml` | no | programmi e versioni del workspace (vedi [Programmi](tools.md)) | collegato in `<ws>/mise.toml` |
@@ -51,6 +51,8 @@ Dove finisce la cartella del workspace, in quest'ordine: `--path` (ricordato in 
 
 | File | Contenuto |
 |---|---|
+| `agents-defaults.txt` | Valori iniziali per le postazioni senza una scelta salvata. Un nuovo archivio usa `none off`. |
+| `AGENTS.md` | Regole generali per Codex e Copilot CLI. Per usarle anche in Claude, dichiarale in `links.txt`. |
 | `links.txt` | `<file in global/> <destinazione> [unisci]`: cosa portare sul computer e dove |
 | `requires.txt` | `<comando> [facoltativo]  # come installarlo`: programmi che mise non gestisce. Il commento diventa il comando proposto nel riepilogo. |
 | `integrations.txt` | `<integrazione>  # come installarla`: integrazioni degli agenti attive (vedi [Agenti](agents.md#integrazioni)) |
@@ -68,7 +70,7 @@ claude/settings.json      ${CLAUDE_HOME}/settings.json          unisci
 mise/config.toml          ${XDG_CONFIG_HOME}/mise/config.toml
 ```
 
-- Nella destinazione valgono solo `${HOME}`, `${CLAUDE_HOME}` (default `~/.claude`) e `${XDG_CONFIG_HOME}` (default `~/.config`). Ogni altro `$` viene rifiutato.
+- I segnaposto ammessi sono `${HOME}`, `${CLAUDE_HOME}`, `${CODEX_HOME}`, `${COPILOT_HOME}` e `${XDG_CONFIG_HOME}`. I collegamenti di un agente esplicitamente disattivato vengono saltati.
 - Senza terzo campo il file è **collegato**: ogni modifica sul computer finisce nell'archivio.
 - Con `unisci` il file è **unito**: resta una copia sul computer e viene unito all'archivio voce per voce. Funziona solo con file JSON. Vedi [Più computer](multi-computer.md#file-uniti).
 

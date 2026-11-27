@@ -18,12 +18,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/theme.sh"
 
 # Questions and the live zone need a terminal; colors also need NO_COLOR unset.
 shopt -s extglob
-if [[ -t 1 ]]; then
-	IS_INTERACTIVE=true
-else
-	IS_INTERACTIVE=false
-fi
-if $IS_INTERACTIVE && [[ -z "${NO_COLOR:-}" ]]; then
+HAS_TTY=false
+IS_INTERACTIVE=false
+[[ -t 1 ]] && HAS_TTY=true
+if $HAS_TTY && ! $NON_INTERACTIVE; then IS_INTERACTIVE=true; fi
+# shellcheck disable=SC2153 # PLAIN is parsed before loading this module.
+if [[ -t 1 && "${TERM:-dumb}" != dumb && -z "${NO_COLOR:-}" ]] && ! $PLAIN; then
 	load_theme
 else
 	no_colors
@@ -53,23 +53,10 @@ unset _badge
 output_width() {
 	local width=80
 	# One column free: a line as wide as the terminal wraps in some of them.
-	$IS_INTERACTIVE && width=$(($(terminal_width) - 1))
+	$HAS_TTY && width=$(($(terminal_width) - 1))
 	((width > 100)) && width=100
 	OUTPUT_WIDTH=$width
 }
-
-QUOTES=(
-	"May the fetch be with you."
-	"All your branch are belong to develop."
-	"It's not a bug, it's a feature branch."
-	"There's no place like 127.0.0.1."
-	"git gud."
-	"Fast-forward: l'unico viaggio nel tempo consentito."
-	"Un engramma al giorno toglie il context window di torno."
-	"Ricordare è facile, se hai fatto git push."
-	"rm -rf è per sempre. I symlink no."
-	"Works on my machine. Ora anche sull'altra."
-)
 
 PROBLEM_COUNT=0
 NEXT_STEPS=()
@@ -120,7 +107,7 @@ tilde() {
 # put appends to a queue it prints from, so nothing can interleave. Elsewhere
 # (pipe, hook, CI, NO_COLOR) every line is printed as it comes, without codes.
 LIVE=false
-if $IS_INTERACTIVE && [[ -z "${NO_COLOR:-}" && "${TERM:-dumb}" != dumb && -z "${CI:-}" ]]; then
+if [[ -t 1 && -z "${NO_COLOR:-}" && "${TERM:-dumb}" != dumb && -z "${CI:-}" ]] && ! $PLAIN; then
 	LIVE=true
 fi
 LIVE_DIR=""
@@ -201,7 +188,7 @@ align_badge() {
 	local room=$((OUTPUT_WIDTH - BADGE_WIDTH - 2))
 	strip_colors plain "$left"
 	# Outside a terminal a long line stays whole, easier to search.
-	if ((${#plain} > room)) && ! $IS_INTERACTIVE; then
+	if ((${#plain} > room)) && ! $HAS_TTY; then
 		aligned="$left  $badge"
 		return
 	fi
@@ -314,16 +301,25 @@ elapsed_label() {
 
 # Sets the variable $1 to a line of the zone: without colors and tabs, cut to the
 # width $3 so it never wraps (a wrapped line would shift every redraw).
+declare -A FIT_CACHE=()
 fit_line() {
-	local text
+	local text fit_key
 	strip_colors text "$2"
 	text="${text##*$'\r'}"
-	# Characters two columns wide (emoji, ideograms) would wrap the line: only
-	# Latin letters, punctuation, arrows, box drawing and dingbats stay.
-	text="${text//[^ -~ -ɏ‐-⋿─-◿✀-➿$'\xee\x80\x80'-$'\xef\xa3\xbf']/?}"
 	text="${text//$'\t'/  }"
-	(($3 < 1)) && text=""
-	((${#text} > $3 && $3 > 0)) && text="${text:0:$3-1}…"
+	if (($3 < 1)); then
+		text=""
+	elif [[ "$text" == *[^[:print:]]* || "$text" == *[^\ -ɏ‐-⋿─-◿✀-➿]* ]]; then
+		fit_key="$3:$text"
+		if [[ ! -v 'FIT_CACHE[$fit_key]' ]]; then
+			((${#FIT_CACHE[@]} < 64)) || FIT_CACHE=()
+			# shellcheck disable=SC2153 # LIB_DIR is the program's library directory.
+			FIT_CACHE[$fit_key]="$("$PYTHON" "$LIB_DIR/terminal_text.py" "$3" "$text")"
+		fi
+		text="${FIT_CACHE[$fit_key]}"
+	elif ((${#text} > $3)); then
+		text="${text:0:$3-1}…"
+	fi
 	printf -v "$1" '%s' "$text"
 }
 
@@ -404,7 +400,7 @@ render_live() {
 }
 
 output_width
-$IS_INTERACTIVE && trap output_width WINCH
+$HAS_TTY && trap output_width WINCH
 
 # ── log ───────────────────────────────────────────────────────────────────────
 
@@ -418,18 +414,26 @@ LOG_FD=""
 # A restart after the pull of engramma keeps writing the same log.
 start_log() {
 	LOG_FILE="${ENGRAMMA_LOG_FILE:-}"
+	if [[ "$LOG_FILE" == /dev/null ]]; then LOG_FILE=""; return 0; fi
 	if [[ -z "$LOG_FILE" ]]; then
 		mkdir -p "$LOG_DIR" || return 0
 		LOG_FILE="$LOG_DIR/$(date +%Y-%m-%d-%H%M%S).log"
-		[[ -e "$LOG_FILE" ]] && LOG_FILE="${LOG_FILE%.log}-$$.log"
+		if ! (umask 077; set -o noclobber; : >"$LOG_FILE") 2>/dev/null; then
+			LOG_FILE="${LOG_FILE%.log}-$$.log"
+			(umask 077; set -o noclobber; : >"$LOG_FILE") 2>/dev/null || { LOG_FILE=""; return 0; }
+		fi
 		export ENGRAMMA_LOG_FILE="$LOG_FILE"
-		: >"$LOG_FILE"
 		local old
-		while IFS= read -r old; do
-			rm -f "$old"
-		done < <(find "$LOG_DIR" -maxdepth 1 -name '*.log' | sort | head -n -"$LOG_KEEP")
+		while IFS= read -r -d '' old; do
+			rm -f -- "$old"
+		done < <(logs_newest_first | tail -z -n "+$((LOG_KEEP + 1))")
 	fi
 	exec {LOG_FD}>>"$LOG_FILE" || LOG_FD=""
+}
+
+logs_newest_first() {
+	LC_ALL=C find "$LOG_DIR" -maxdepth 1 -type f -name '*.log' -printf '%T@\t%p\0' 2>/dev/null |
+		LC_ALL=C sort -z -nr | cut -z -f2-
 }
 
 log_line() {
@@ -462,7 +466,7 @@ cleanup_output() {
 	finish_log
 	[[ -n "$LIVE_DIR" ]] && rm -rf "$LIVE_DIR"
 	[[ -n "${SSH_PROBE_DIR:-}" ]] && rm -rf "$SSH_PROBE_DIR"
-	$LIVE && printf '\e[?25h'
+	[[ -n "$LIVE_DIR" ]] && printf '\e[?25h'
 	return 0
 }
 
@@ -816,7 +820,7 @@ ask() {
 	flush_block
 	local resume=false
 	[[ -n "$LIVE_PID" ]] && resume=true && stop_activity
-	read -r -p "        ${BOLD}$1${RESET} " ASK_ANSWER </dev/tty
+	read -r -p "        ${BOLD}$1${RESET} " ASK_ANSWER </dev/tty || ASK_ANSWER=""
 	log_line "        $1 $ASK_ANSWER"
 	ASK_ANSWER="${ASK_ANSWER,,}"
 	$resume && start_activity
@@ -958,6 +962,14 @@ print_slow_and_failed() {
 	return 0
 }
 
+has_summary_warnings() {
+	local entry
+	for entry in "${NOTES[@]}"; do
+		[[ "$entry" == warning$'\t'* || "$entry" == local$'\t'* ]] && return 0
+	done
+	((${#SLOW_REPOS[@]} > 0))
+}
+
 print_summary_standard() {
 	local elapsed="${DIM}${SECONDS}s${RESET}" separator
 	brand_rule separator $((OUTPUT_WIDTH - 1))
@@ -965,13 +977,18 @@ print_summary_standard() {
 	put " $separator"
 	put ""
 	if ((${#NOTES[@]})); then
-		print_notes_standard problem "${RED}$ICON_ERR${RESET}"
+		if $HAS_TTY; then
+			print_notes_standard problem "${RED}$ICON_ERR${RESET}"
+		else
+			print_notes_standard problem "${RED}$ICON_ERR${RESET}" >&2
+		fi
 		print_notes_standard local "${YELLOW}$ICON_WARN${RESET}"
 		print_notes_standard warning "${BLUE}$ICON_INFO${RESET}"
 		put ""
 	fi
 	print_next_steps
 	print_slow_and_failed
+	print_memory_inventory
 	if ((PROBLEM_COUNT)); then
 		local noun="problemi da risolvere" icon="${YELLOW}$ICON_WARN${RESET}"
 		((PROBLEM_COUNT == 1)) && noun="problema da risolvere"
@@ -979,11 +996,11 @@ print_summary_standard() {
 		put " $icon ${BOLD}$PROBLEM_COUNT $noun${RESET}  ${DIM}·${RESET} $elapsed"
 		[[ -n "$LOG_FILE" ]] && put "   ${DIM}log: $(tilde "$LOG_FILE")${RESET}"
 	elif [[ "$MODE" == dry ]]; then
-		put " ${CYAN}$ICON_DRY${RESET} ${BOLD}prova finita${RESET}  ${DIM}·${RESET} $elapsed  ${DIM}· niente è stato modificato${RESET}"
+		put " ${CYAN}$ICON_DRY${RESET} ${BOLD}prova finita${RESET}  ${DIM}·${RESET} $elapsed"
+	elif has_summary_warnings; then
+		put " ${YELLOW}$ICON_WARN ${BOLD}operazione conclusa con avvisi${RESET}  ${DIM}·${RESET} $elapsed"
 	else
 		put " ${GREEN}$ICON_OK${RESET} ${BOLD}tutto a posto${RESET}  ${DIM}·${RESET} $elapsed"
-		put ""
-		put "   ${REF}❝${RESET} ${DIM}${QUOTES[RANDOM % ${#QUOTES[@]}]}${RESET}"
 	fi
 	return 0
 }
@@ -1001,11 +1018,16 @@ print_summary() {
 	put ""
 	put " $separator"
 	put ""
-	print_notes problem "da sistemare" "$RED"
+	if $HAS_TTY; then
+		print_notes problem "da sistemare" "$RED"
+	else
+		print_notes problem "da sistemare" "$RED" >&2
+	fi
 	print_notes local "modifiche locali e repo non aggiornati" "$YELLOW"
 	print_notes warning "avvisi" "$BLUE"
 	print_next_steps
 	print_slow_and_failed
+	print_memory_inventory
 	local elapsed="${DIM}${SECONDS}s${RESET}"
 	if ((PROBLEM_COUNT)); then
 		local outcome="${BADGES[warn]}" noun="problemi da risolvere"
@@ -1013,12 +1035,13 @@ print_summary() {
 		((PROBLEM_COUNT == 1)) && noun="problema da risolvere"
 		put " ${BOLD}operazione conclusa: $PROBLEM_COUNT $noun${RESET}  ${DIM}·${RESET} $elapsed$DOTS_MARK$outcome"
 	elif [[ "$MODE" == dry ]]; then
-		put " ${BOLD}prova finita${RESET}  ${DIM}·${RESET} $elapsed  ${DIM}· niente è stato modificato${RESET}$DOTS_MARK${BADGES[dry]}"
+		put " ${BOLD}prova finita${RESET}  ${DIM}·${RESET} $elapsed$DOTS_MARK${BADGES[dry]}"
+	elif has_summary_warnings; then
+		put " ${BOLD}operazione conclusa con avvisi${RESET}  ${DIM}·${RESET} $elapsed$DOTS_MARK${BADGES[warn]}"
 	else
 		put " ${BOLD}tutto a posto${RESET}  ${DIM}·${RESET} $elapsed$DOTS_MARK${BADGES[fine]}"
 	fi
 	put ""
-	put "   ${REF}❝${RESET} ${DIM}${QUOTES[RANDOM % ${#QUOTES[@]}]}${RESET}"
 	[[ -n "$LOG_FILE" ]] && put "   ${DIM}log: $(tilde "$LOG_FILE")${RESET}"
 	return 0
 }
@@ -1053,8 +1076,14 @@ print_logo() {
 print_header() {
 	local mode_label
 	case "$MODE" in
-		dry) mode_label="${CYAN}--dry-run${RESET} ${DIM}nessuna modifica${RESET}" ;;
-		check) mode_label="${DIM}sola lettura${RESET}" ;;
+		dry) mode_label="${CYAN}--dry-run${RESET} ${DIM}anteprima locale${RESET}" ;;
+		check)
+			if $REFRESH; then
+				mode_label="${DIM}controllo con aggiornamento remoto${RESET}"
+			else
+				mode_label="${DIM}controllo locale${RESET}"
+			fi
+			;;
 		*) mode_label="" ;;
 	esac
 	# Standard: the logo only when setting up, a line of title otherwise.

@@ -56,8 +56,8 @@ I repo vengono clonati e aggiornati in parallelo, 3 alla volta, mentre si contro
 
 ## Regole di sicurezza
 
-- **Archivio valido o niente.** Se l'archivio scelto non esiste o non è valido, `eng` si ferma: non ne crea uno e non ne usa un altro.
-- **Il controllo non cambia niente.** `eng` e `eng check` non toccano dati, configurazione né collegamenti. Aggiornano solo i riferimenti remoti di Git (`git fetch`), senza applicarli.
+- **Archivio valido o niente.** Se l’archivio scelto manca o non è valido, Engramma lo segnala ed esegue soltanto i controlli della postazione che non richiedono l’archivio.
+- **Controllo locale.** `eng` e `eng check` leggono lo stato locale e scrivono un log. `eng check --refresh` aggiorna anche i riferimenti remoti dell’archivio Git senza applicare modifiche ai suoi file.
 - **Stessi dati, cartelle diverse.** Ogni computer può tenere un workspace in una cartella diversa (`--path`): l'archivio conserva solo i dati condivisi.
 - **Mai sovrascrivere.** Dove dovrebbe esserci un collegamento e c'è altro, `eng` lo segnala e dice cosa confrontare. Sostituisce da solo solo una copia identica.
 - **Backup prima di toccare.** Prima di sostituire una memoria scritta da Claude o un file globale diverso, `eng` ne tiene una copia in `~/.local/state/engramma/backup/`, fuori dall'archivio.

@@ -14,10 +14,14 @@ expand_global_destination() {
 	local destination="$1" config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 	local remaining="${destination//\$\{HOME\}/}"
 	remaining="${remaining//\$\{CLAUDE_HOME\}/}"
+	remaining="${remaining//\$\{CODEX_HOME\}/}"
+	remaining="${remaining//\$\{COPILOT_HOME\}/}"
 	remaining="${remaining//\$\{XDG_CONFIG_HOME\}/}"
 	[[ "$remaining" != *'$'* ]] || return 1
 
 	destination="${destination//\$\{CLAUDE_HOME\}/$CLAUDE_HOME}"
+	destination="${destination//\$\{CODEX_HOME\}/$CODEX_HOME_DIR}"
+	destination="${destination//\$\{COPILOT_HOME\}/$COPILOT_HOME_DIR}"
 	destination="${destination//\$\{XDG_CONFIG_HOME\}/$config_home}"
 	echo "${destination//\$\{HOME\}/$HOME}"
 }
@@ -34,9 +38,10 @@ link_global() {
 	while read -r source destination how _; do
 		[[ -n "$destination" ]] || continue
 		if ! destination="$(expand_global_destination "$destination")"; then
-			problem "${FILE}$source${RESET}: segnaposto non ammesso nella destinazione ${DIM}(solo \${HOME}, \${CLAUDE_HOME}, \${XDG_CONFIG_HOME})${RESET}"
+			problem "${FILE}$source${RESET}: segnaposto non ammesso nella destinazione ${DIM}(usa i percorsi documentati)${RESET}"
 			continue
 		fi
+		global_link_enabled "$source" "$destination" || continue
 		if [[ ! -f "$GLOBAL_DIR/$source" ]]; then
 			problem "${FILE}$source${RESET}: elencato in global/links.txt ma assente in global/"
 		elif [[ "$how" == unisci ]]; then
@@ -45,7 +50,7 @@ link_global() {
 			ensure_global_link "$source" "$destination"
 		fi
 	done < <(global_entries)
-	check_claude_hooks
+	if agent_enabled claude; then check_claude_hooks; fi
 }
 
 ensure_global_link() {
@@ -64,7 +69,15 @@ ensure_global_link() {
 	if [[ ! -e "$link" ]]; then
 		link_global_file "$name" "$target" "$link" "symlink"
 	elif cmp -s "$target" "$link"; then
-		link_global_file "$name" "$target" "$link" "copia identica → symlink"
+		if [[ "$MODE" == run ]]; then
+			if replace_global_link "$target" "$link"; then
+				ok "${FILE}$name${RESET}: copia identica sostituita dal collegamento"
+			else
+				problem "${FILE}$name${RESET}: impossibile sostituire la copia identica in $(path "$link")"
+			fi
+		else
+			link_global_file "$name" "$target" "$link" "copia identica → symlink"
+		fi
 	else
 		resolve_global_difference "$name" "$target" "$link"
 	fi
@@ -76,19 +89,38 @@ link_global_file() {
 		dry) would "${FILE}$name${RESET}: $dry_message ${DIM}($(path "$link"))${RESET}" ;;
 		check) problem "${FILE}$name${RESET}: symlink mancante ${DIM}($(path "$link"))${RESET}" ;;
 		*)
-			mkdir -p "$(dirname "$link")"
-			ln -sfn "$target" "$link"
+			if ! mkdir -p -- "$(dirname "$link")" || ! ln -sT -- "$target" "$link"; then
+				problem "${FILE}$name${RESET}: impossibile creare il collegamento $(path "$link")"
+				return 1
+			fi
 			ok "${FILE}$name${RESET} → symlink creato ${DIM}($(path "$link"))${RESET}"
 			;;
 	esac
 }
 
+replace_global_link() (
+	local target="$1" link="$2" staging
+	staging="$(mktemp -d -- "${link}.engramma-XXXXXXXX")" || return 1
+	trap 'rm -rf -- "$staging"' EXIT
+	ln -sT -- "$target" "$staging/link" &&
+		mv -T -- "$staging/link" "$link"
+)
+
+copy_global_file() (
+	local source="$1" target="$2" staging
+	[[ -w "$target" ]] || return 1
+	staging="$(mktemp -- "${target}.engramma-XXXXXXXX")" || return 1
+	trap 'rm -f -- "$staging"' EXIT
+	cp -p -- "$source" "$staging" && mv -T -- "$staging" "$target"
+)
+
 # A program replaced the link with a file of its own (boost does it when it
 # installs): in a terminal engramma asks which copy to keep, otherwise it says so.
 resolve_global_difference() {
-	local name="$1" target="$2" link="$3" answer=""
+	local name="$1" target="$2" link="$3" answer="" conflict backup
 
 	problem "${FILE}$name${RESET}: un programma ha sostituito il symlink con un file diverso ${DIM}($(path "$link"))${RESET}"
+	conflict=$LAST_NOTE
 	if [[ "$MODE" == run ]] && $IS_INTERACTIVE; then
 		while true; do
 			ask "tengo [c] il file del computer (copiato in engramma) · [e] quello di engramma (backup del locale) · [d] diff · [s] salto?"
@@ -103,14 +135,19 @@ resolve_global_difference() {
 
 	case "$answer" in
 		c)
-			if ! cp "$link" "$target" 2>/dev/null; then
+			backup="$BACKUP_DIR/global/$BACKUP_STAMP/archive/$name"
+			if ! { mkdir -p -- "$(dirname "$backup")" && cp -a -- "$target" "$backup"; } 2>/dev/null; then
+				problem "${FILE}$name${RESET}: backup dell’archivio non riuscito, copie conservate"
+				return
+			fi
+			if ! copy_global_file "$link" "$target" 2>/dev/null; then
 				problem "${FILE}$name${RESET}: copia in engramma non riuscita, file del computer lasciato com'è ${DIM}($(path "$link"))${RESET}"
 				return
 			fi
 			ok "${FILE}$name${RESET}: file del computer copiato in engramma"
 			;;
 		e)
-			local backup="$BACKUP_DIR/global/$BACKUP_STAMP/$name"
+			backup="$BACKUP_DIR/global/$BACKUP_STAMP/$name"
 			if ! { mkdir -p "$(dirname "$backup")" && cp -a "$link" "$backup"; } 2>/dev/null; then
 				problem "${FILE}$name${RESET}: backup non riuscito, file del computer lasciato com'è ${DIM}($(path "$link"))${RESET}"
 				return
@@ -122,9 +159,16 @@ resolve_global_difference() {
 			return
 			;;
 	esac
+	if ! replace_global_link "$target" "$link"; then
+		problem "${FILE}$name${RESET}: collegamento fallito, copia locale conservata in $(path "$link")"
+		return
+	fi
 	PROBLEM_COUNT=$((PROBLEM_COUNT - 1))
-	rm "$link"
-	link_global_file "$name" "$target" "$link" ""
+	BLOCK_ISSUES=$((BLOCK_ISSUES - 1))
+	unset 'NOTES[conflict]'
+	NOTES=("${NOTES[@]}")
+	LAST_NOTE=$(("${#NOTES[@]}" - 1))
+	ok "${FILE}$name${RESET} → symlink creato ${DIM}($(path "$link"))${RESET}"
 }
 
 ENGRAMMA_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/engramma"
@@ -219,6 +263,9 @@ global_required_commands() {
 }
 
 is_global_requirement() {
+	if $EXPLICIT_AGENTS; then
+		case "$1" in claude | codex | copilot) agent_enabled "$1"; return ;; esac
+	fi
 	global_required_commands | grep -qxF "$1"
 }
 
@@ -240,6 +287,9 @@ check_global_commands() {
 		[[ "$line" == *'#'* ]] && hint="$(echo "${line#*#}" | sed -E 's/^[[:space:]]+//')"
 		read -r command optional _ <<<"${line%%#*}"
 		[[ -n "$command" ]] || continue
+		if $EXPLICIT_AGENTS; then
+			case "$command" in claude | codex | copilot) continue ;; esac
+		fi
 		report_global_command "$command" "$optional" "$hint"
 	done < <(read_list_file "$GLOBAL_REQUIRES_FILE")
 
@@ -433,6 +483,7 @@ check_zoxide_init() {
 # code-review-graph answers Claude Code through an MCP server registered in the
 # configuration of this computer (not linked: it holds machine data).
 check_code_graph_servers() {
+	agent_enabled claude || return 0
 	integration_enabled code-review-graph && command -v code-review-graph >/dev/null || return 0
 	if grep -qs '"code-review-graph"' "$HOME/.claude.json"; then
 		fine "MCP code-review-graph registrato in Claude Code"

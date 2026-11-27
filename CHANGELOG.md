@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Inventario per file della memoria di Claude nel log e riepilogo per operazione. Anche il salvataggio manuale registra il commit locale e l’esito dell’invio.
+- Setup guidato con scelta di archivio, agenti e memoria, anteprima e sincronizzazione facoltativa del primo workspace.
+- Scelta locale fra Claude Code, Codex e Copilot CLI con `eng setup --agents` e riepilogo con `eng agents`.
+- Copilot CLI riceve istruzioni personali, skill e contesto dei repo. La memoria di Claude può essere disattivata senza perdere i ricordi già collegati.
+- Controlli e anteprime locali, `check --refresh` per verificare il remoto, aiuto per comando e codici distinti per errori d’uso.
+- Percorsi salvati in modo atomico, blocco per archivio e scollegamento che dimentica l’archivio dopo il successo.
+- `--prune` conserva i branch con commit solo locali.
+- Output statico con `--plain`, Unicode comune di default e opzione `--non-interactive`.
+- Documentazione navigabile con Zensical e workflow GitHub Pages.
 - Programma separato dall'archivio privato, con scelta dell'archivio per postazione o per singola esecuzione.
 - Memoria nativa Claude con acquisizione verificata, backup e gestione delle interruzioni.
 - Salvataggio e invio ritentabile dei commit locali.

@@ -30,6 +30,7 @@ setup_sandbox() {
 	TEST_ROOT="$(mktemp -d)"
 	cp -a "$BATS_FILE_TMPDIR/template/." "$TEST_ROOT/"
 	export HOME="$TEST_ROOT/home"
+	export PATH="$HOME/.local/bin:$PATH"
 	export XDG_CONFIG_HOME="$HOME/.config"
 	export XDG_DATA_HOME="$HOME/.local/share"
 	export XDG_STATE_HOME="$HOME/.local/state"
@@ -37,6 +38,8 @@ setup_sandbox() {
 	export ENGRAMMA_DIR="$TEST_ROOT/engramma"
 	unset ENGRAMMA_DATA_DIR ENGRAMMA_UPDATED
 	export ENGRAMMA_CLAUDE_HOME="$HOME/.claude"
+	export CODEX_HOME="$HOME/.codex"
+	export COPILOT_HOME="$HOME/.copilot"
 	export ENGRAMMA_HOSTS_FILE="$TEST_ROOT/hosts"
 	export GIT_CONFIG_GLOBAL="$TEST_ROOT/gitconfig"
 	export GIT_CONFIG_NOSYSTEM=1
