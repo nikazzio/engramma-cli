@@ -49,6 +49,7 @@ detach_repo_note() {
 }
 
 detach_repo_files() {
+	project_skills "$1" "$2" detach
 	local repo="$1" name="$2" source
 	local files_dir="$WORKSPACE_NOTES_DIR/repo-files/$name"
 	[[ -d "$files_dir" ]] || return 0

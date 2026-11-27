@@ -201,7 +201,7 @@ complete_eng() {
 	"$SYNC" sync demo >/dev/null
 	memory="$(memory_dir_for "$WORKSPACE/alpha")"
 	echo "ricordo dal primo computer" >"$memory/MEMORY.md"
-	"$SYNC" save demo >/dev/null
+	"$SYNC" sync demo >/dev/null
 	git -C "$other" pull --quiet --ff-only
 	[ "$(cat "$other/workspaces/demo/memory/alpha/MEMORY.md")" = "ricordo dal primo computer" ]
 	echo "ricordo dal secondo computer" >"$other/workspaces/demo/memory/alpha/MEMORY.md"
@@ -248,4 +248,21 @@ complete_eng() {
 	run "$SYNC" log
 	[ "$status" -eq 0 ]
 	[[ "$output" == *"check"* ]]
+}
+
+@test "sync retries offline workspace changes without committing other workspaces" {
+	mkdir -p "$ENGRAMMA_DIR/workspaces/altro"
+	echo privata >"$ENGRAMMA_DIR/workspaces/altro/nota.md"
+	echo locale >"$NOTES/docs/nuova.md"
+	git -C "$ENGRAMMA_DIR" remote set-url origin "$TEST_ROOT/missing.git"
+	run "$SYNC" sync demo
+	[ "$status" -ne 0 ]
+	local saved
+	saved="$(git -C "$ENGRAMMA_DIR" rev-parse HEAD)"
+	[ "$(git -C "$ENGRAMMA_DIR" show HEAD:workspaces/demo/docs/nuova.md)" = locale ]
+	! git -C "$ENGRAMMA_DIR" cat-file -e HEAD:workspaces/altro/nota.md
+	git -C "$ENGRAMMA_DIR" remote set-url origin "$TEST_ROOT/remotes/engramma.git"
+	run "$SYNC" sync demo
+	[ "$status" -eq 0 ]
+	[ "$(git -C "$TEST_ROOT/remotes/engramma.git" rev-parse main)" = "$saved" ]
 }

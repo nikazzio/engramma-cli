@@ -925,3 +925,17 @@ stable_output() {
 	[ -f "$WORKSPACE/alpha/.git/index.lock" ]
 	rm "$WORKSPACE/alpha/.git/index.lock"
 }
+
+@test "project skill is private to its repository and detachable" {
+	mkdir -p "$NOTES/skills/beta/layout"
+	echo "Layout" >"$NOTES/skills/beta/layout/SKILL.md"
+	run "$SYNC" sync demo
+	[ "$status" -eq 0 ]
+	[ -L "$WORKSPACE/beta/.agents/skills/layout" ]
+	[ ! -e "$WORKSPACE/alpha/.agents/skills/layout" ]
+	[ -z "$(git -C "$WORKSPACE/beta" status --porcelain)" ]
+	run "$SYNC" detach demo
+	[ "$status" -eq 0 ]
+	[ ! -L "$WORKSPACE/beta/.agents/skills/layout" ]
+	[ "$(cat "$WORKSPACE/beta/.agents/skills/layout/SKILL.md")" = Layout ]
+}

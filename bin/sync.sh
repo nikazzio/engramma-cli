@@ -61,7 +61,7 @@ Comandi
   (nessuno)            check in sola lettura di postazione e workspace presenti:
                        drift dei symlink, merge pendenti, repo mancanti, lavoro non pushato
   sync [workspace...]  pull dell'archivio, setup della postazione, poi per ogni workspace
-                       clone, symlink, checkout del branch principale e fast-forward
+                       clone, collegamenti, aggiornamento repo e invio del contesto privato
                        (senza nome: i workspace già presenti su questa macchina)
   setup                solo postazione: programmi, file globali, plugin, Codex
   list [workspace...]  i workspace di engramma con cartella e repo, senza toccare niente
@@ -348,7 +348,7 @@ case "$COMMAND" in
 		;;
 esac
 
-[[ "$MODE" == run ]] && pull_engramma
+[[ "$MODE" == run ]] && { load_ssh_agent; pull_engramma; }
 
 print_header "$COMMAND"
 
@@ -376,5 +376,8 @@ $ALL_WORKSPACES || EXPAND_BLOCKS=true
 for name in "${WORKSPACES[@]}"; do
 	workspace_steps "$name"
 done
+if [[ "$COMMAND" == sync && "$MODE" == run ]]; then
+	send_workspace_updates "${WORKSPACES[@]}"
+fi
 $ALL_WORKSPACES && report_absent_workspaces
 finish

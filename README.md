@@ -23,7 +23,7 @@ Per l'uso quotidiano, salva il percorso letterale nel file `~/.config/engramma/a
 |---|---|
 | `eng` | Controlla postazione e workspace presenti |
 | `eng list` | Elenca workspace e progetti |
-| `eng sync demo` | Riceve i dati, prepara i collegamenti e aggiorna i repo compatibili |
+| `eng sync demo` | Riceve i dati, aggiorna i progetti e invia il contesto del workspace |
 | `eng save demo` | Crea il commit del workspace e invia i commit del branch |
 | `eng detach demo` | Trasforma i collegamenti personali in copie indipendenti |
 

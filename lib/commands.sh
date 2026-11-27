@@ -49,6 +49,48 @@ save_engramma() {
 	fi
 }
 
+# Exchange only the selected workspace data. Git pushes earlier commits on
+# the same branch too, including a commit left by an interrupted sync.
+send_workspace_updates() {
+	local area paths=() changed ahead behind
+	[[ "$(engramma_git rev-parse --show-toplevel 2>/dev/null)" == "$ENGRAMMA_DIR" ]] || return 0
+	for area in "$@"; do paths+=("workspaces/$area"); done
+	if [[ -n "$(engramma_git ls-files -u)" ]] || engramma_git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+		problem "Merge pendente nell'archivio: completalo prima di ripetere eng sync"
+		return
+	fi
+	if ((${#paths[@]})); then
+		changed="$(engramma_git status --porcelain -- "${paths[@]}")" || { problem "Impossibile leggere le modifiche dell'archivio"; return; }
+		if [[ -n "$changed" ]]; then
+			if ! engramma_git add -A -- "${paths[@]}" || ! engramma_git commit -q -m "Update workspace context" -- "${paths[@]}"; then
+				problem "Salvataggio locale fallito: verifica l'archivio prima di cambiare computer"
+				return
+			fi
+			ok "Contesto salvato su questo computer"
+		fi
+	fi
+	if ! has_engramma_remote; then
+		problem "Archivio solo locale: configura il branch remoto per inviare il contesto"
+		return
+	fi
+	if [[ "$ENGRAMMA_FETCH" != ok ]]; then
+		problem "Archivio conservato su questo computer: ricezione e invio non confermati. Riprova con eng sync"
+		return
+	fi
+	behind="$(engramma_git rev-list --count 'HEAD..@{upstream}')" || { problem "Stato remoto non verificato"; return; }
+	if ((behind)); then
+		problem "Aggiornamenti remoti non applicati: contesto locale conservato, invio sospeso"
+		return
+	fi
+	ahead="$(engramma_git rev-list --count '@{upstream}..HEAD')" || { problem "Commit da inviare non verificati"; return; }
+	((ahead)) || return 0
+	if GIT_TERMINAL_PROMPT=0 GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=10" engramma_git push --quiet 2>/dev/null; then
+		ok "$ahead commit dell'archivio inviati"
+	else
+		problem "Commit salvati su questo computer, invio fallito: riprova con eng sync"
+	fi
+}
+
 # The skeleton of a new workspace: README, folder and an empty list of repos.
 new_workspace() {
 	local name="${1:-}" location="${2:-}" dir

@@ -44,6 +44,8 @@ In quest'ordine: `--path <cartella>` (salvato in `~/.config/engramma/paths` per 
 4. Collega `.claude/`, `docs/` e la memoria di Claude.
 5. Per ogni repo: lo clona se manca, collega note e file personali, poi lo porta sul branch principale aggiornato. Salta i repo con modifiche non salvate o con un branch ancora in corso. Elenca i branch locali mergiati o il cui branch remoto è stato rimosso. Per quelli con tutti i commit sul remoto, alla fine del workspace chiede se cancellarli; fuori da un terminale li lascia. I branch con commit assenti dal remoto restano fuori dalla domanda: possono essere commit mai pushati oppure unificati con uno squash. `--prune` cancella senza chiedere tutti i branch elencati, anche quelli con commit solo locali.
 
+Il comando salva le modifiche dei workspace selezionati e invia i commit del branch privato, inclusi quelli già presenti. Se l’invio fallisce, rilancia lo stesso comando. Le modifiche al codice dei clienti restano locali.
+
 Senza nome, `eng sync` fa lo stesso per tutti i workspace la cui cartella esiste già su questo computer. Rilanciarlo è sicuro: fa solo ciò che manca.
 
 ### Repo in parallelo
@@ -240,3 +242,7 @@ Dopo, engramma si può cancellare e progetti, Claude Code e Codex continuano a f
 ## Limiti
 
 - I nomi di cartella con spazi non sono supportati.
+
+## Skill di progetto
+
+Nell’archivio privato crea `workspaces/<gruppo>/skills/<repo>/<nome>/SKILL.md`. Conserva nella stessa cartella gli eventuali script della skill. Con `eng sync <gruppo>` la skill diventa disponibile in `.agents/skills/<nome>` nel progetto scelto. Puoi modificarla da lì e inviarla con `eng sync <gruppo>`. Una skill locale con lo stesso nome richiede una scelta manuale. Gli agenti che leggono questa cartella possono scoprirla.

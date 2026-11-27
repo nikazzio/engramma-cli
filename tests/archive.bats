@@ -134,12 +134,18 @@ teardown() {
 	local first_memory second_memory other_home="$TEST_ROOT/second home"
 	local program_before
 	program_before="$(sha256sum "$SYNC")"
+	local remote="$TEST_ROOT/remotes/archive.git"
+	git clone --quiet --bare "$ENGRAMMA_DIR" "$remote"
+	git -C "$ENGRAMMA_DIR" remote add origin "$remote"
+	git -C "$ENGRAMMA_DIR" fetch --quiet
+	git -C "$ENGRAMMA_DIR" branch --quiet --set-upstream-to=origin/main
+	git -C "$ARCHIVE" remote set-url origin "$remote"
 	# Select the first archive explicitly; the saved default is the second clone.
 	"$SYNC" --data-dir "$ENGRAMMA_DIR" sync demo >/dev/null
 	first_memory="$(memory_dir_for "$WORKSPACE/alpha")"
 	echo "ricordo dal primo computer" >"$first_memory/MEMORY.md"
-	"$SYNC" --data-dir "$ENGRAMMA_DIR" save demo >/dev/null
-	# The first archive is the local remote of the second clone.
+	"$SYNC" --data-dir "$ENGRAMMA_DIR" sync demo >/dev/null
+	# Both machines exchange through the same bare remote.
 	env HOME="$other_home" XDG_CONFIG_HOME="$other_home/.config" XDG_DATA_HOME="$other_home/.local/share" \
 		XDG_STATE_HOME="$other_home/.local/state" XDG_CACHE_HOME="$other_home/.cache" ENGRAMMA_CLAUDE_HOME="$other_home/.claude" \
 		"$SYNC" --data-dir "$ARCHIVE" sync demo >/dev/null

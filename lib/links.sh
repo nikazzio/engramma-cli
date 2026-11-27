@@ -223,7 +223,41 @@ ensure_repo_note() {
 	return 0
 }
 
+project_skills() {
+	local repo="$1" name="$2" action="$3" target rel link skill
+	for target in "$WORKSPACE_NOTES_DIR/skills/$name"/*; do
+		[[ -d "$target" && ! -L "$target" && -f "$target/SKILL.md" ]] || continue
+		skill="${target##*/}"
+		if [[ ! "$skill" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+			problem "Nome skill non valido: $skill"
+			continue
+		fi
+		rel=".agents/skills/$skill"
+		link="$repo/$rel"
+		if [[ -L "$repo/.agents" || -L "$repo/.agents/skills" ]]; then
+			problem "Cartella skill collegata altrove: $rel"
+			continue
+		fi
+		if [[ "$action" == detach ]]; then
+			[[ "$(readlink "$link")" != "$target" ]] || detach_link "$link" "$skill"
+			continue
+		fi
+		if [[ -n "$(git -C "$repo" ls-files -- "$rel")" || ( -e "$link" && ! -L "$link" ) ]]; then
+			problem "Skill già presente nel progetto: $rel"
+			continue
+		fi
+		if [[ -L "$link" && "$(readlink "$link")" != "$target" ]]; then
+			problem "Skill collegata altrove: $rel"
+			continue
+		fi
+		ensure_excluded "$repo" "/$rel"
+		ensure_link "$target" "$link" "$skill"
+	done
+	return 0
+}
+
 ensure_repo_files() {
+	project_skills "$1" "$2" link
 	local repo="$1" name="$2" source
 	local files_dir="$WORKSPACE_NOTES_DIR/repo-files/$name"
 	[[ -d "$files_dir" ]] || return 0
